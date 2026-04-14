@@ -2,15 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { useContext, useState } from "react";
-import {
-  ArrowLeft,
-  PanelRightClose,
-  Users,
-  GraduationCap,
-  Search,
-  X,
-  ArrowBigRight,
-} from "lucide-react";
+import { PanelRightClose, Users, GraduationCap, Search, X, ArrowBigRight } from "lucide-react";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { SlideUpdateContext } from "../SlideUpdateContext";
 import type { Role } from "@/utils/types";
