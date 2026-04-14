@@ -366,8 +366,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Cannot remove the course professor." }, { status: 403 });
     }
 
-    await prisma.courseEnrollment.delete({
+    // Demote TA back to STUDENT rather than removing them from the course entirely.
+    // This preserves their enrollment so they stay in any active session.
+    await prisma.courseEnrollment.update({
       where: { userId_courseId: { userId: target.id, courseId } },
+      data: { role: "STUDENT" },
     });
 
     return NextResponse.json({ removed: utorid.trim().toLowerCase() });

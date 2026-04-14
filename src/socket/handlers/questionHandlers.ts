@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import {
   validateQuestionContent,
   validateVisibility,
-  checkQuestionRateLimit,
   checkUpvoteRateLimit,
   checkResolveRateLimit,
   validateSessionForQuestions,
@@ -122,18 +121,7 @@ export function handleQuestionCreate(socket: Socket, io: Server): void {
         return;
       }
 
-      // 5. Rate limit (first async check — only reached if all sync checks pass)
-      const isRateLimited = await checkQuestionRateLimit(userId);
-      if (isRateLimited) {
-        console.log("[QuestionHandler] Rejected: rate limited");
-        socket.emit("question:error", {
-          message:
-            "You have reached the question limit. Please wait before asking another question.",
-        });
-        return;
-      }
-
-      // 6. Session validation
+      // 5. Session validation
       const sessionValidation = await validateSessionForQuestions(payload.sessionId);
       if (!sessionValidation.valid) {
         console.log("[QuestionHandler] Rejected: session validation -", sessionValidation.error);
@@ -141,7 +129,7 @@ export function handleQuestionCreate(socket: Socket, io: Server): void {
         return;
       }
 
-      // 6a. Enrollment check — any non-PROFESSOR must be enrolled in the session's course
+      // 5a. Enrollment check — any non-PROFESSOR must be enrolled in the session's course
       const sessionForEnrollment = await prisma.session.findUnique({
         where: { id: payload.sessionId },
         select: { courseId: true },
@@ -159,8 +147,8 @@ export function handleQuestionCreate(socket: Socket, io: Server): void {
         authorEnrollmentRole = enrollment.role;
       }
 
-      // 7. Persist to database (include author for display name in broadcast)
-      //    authorId is always stored for audit purposes, but it is stripped
+      // 6. Persist to database (include author for display name in broadcast)
+      //    authorId is always stored for audit purposes, but stripped
       //    from the broadcast payload in step 8 when isAnonymous is true.
       const question = await prisma.question.create({
         data: {
@@ -339,9 +327,7 @@ function checkResolvePermission(
   questionAuthorId: string | null,
   enrollmentRole: "STUDENT" | "TA" | "PROFESSOR"
 ): boolean {
-  if (enrollmentRole === "TA" || enrollmentRole === "PROFESSOR") {
-    return true;
-  }
+  if (enrollmentRole === "TA" || enrollmentRole === "PROFESSOR") return true;
   return questionAuthorId === userId;
 }
 

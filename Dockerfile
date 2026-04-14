@@ -64,6 +64,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/src ./src
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./
 
+# Whitelist files (needed by auth logic)
+COPY --from=builder --chown=nextjs:nodejs /app/admin_whitelist.txt ./
+COPY --from=builder --chown=nextjs:nodejs /app/whitelist.txt ./
+
 USER nextjs
 
 EXPOSE 3000

@@ -133,6 +133,19 @@ export async function POST(request: NextRequest) {
 
     // Create the course and enroll the professor in one transaction
     const course = await prisma.$transaction(async (tx) => {
+      // Ensure the professor exists in the DB (in case of a system wipe)
+      await tx.user.upsert({
+        where: { id: user.userId },
+        update: {},
+        create: {
+          id: user.userId,
+          utorid: user.utorid,
+          email: user.email,
+          name: user.name,
+          role: "PROFESSOR",
+        },
+      });
+
       const newCourse = await tx.course.create({
         data: {
           code: courseCode,

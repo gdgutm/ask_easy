@@ -1,0 +1,8 @@
+# Admin whitelist — god-mode dashboard access
+# Format: one UTORid per line
+# UTORids listed here can access /dashboard with full read/delete powers.
+# Lines starting with # are comments and are ignored.
+# Restart the server to pick up changes.
+#
+# ---- ADMINS ----
+testprof

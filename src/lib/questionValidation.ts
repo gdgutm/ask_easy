@@ -90,10 +90,15 @@ export function validateVisibility(visibility: unknown): ValidationResult {
 /**
  * Checks whether the given user has exceeded the question rate limit
  * (10 questions per 60-second window).
+ * The counter is scoped to the session so a new session always starts fresh.
  * Returns true if the limit has been exceeded.
  */
-export async function checkQuestionRateLimit(userId: string): Promise<boolean> {
-  return checkRateLimit(questionRateLimit(userId), RATE_LIMIT_COUNT, RATE_LIMIT_WINDOW_SECONDS);
+export async function checkQuestionRateLimit(userId: string, sessionId: string): Promise<boolean> {
+  return checkRateLimit(
+    questionRateLimit(userId, sessionId),
+    RATE_LIMIT_COUNT,
+    RATE_LIMIT_WINDOW_SECONDS
+  );
 }
 
 /**

@@ -52,7 +52,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json({ status: session.status });
+    return NextResponse.json({ status: session.status, courseId: session.courseId });
   } catch (error) {
     console.error("[Sessions API] Failed to fetch session status:", error);
     return NextResponse.json({ error: "An error occurred." }, { status: 500 });

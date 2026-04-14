@@ -21,10 +21,11 @@ export function rateLimit(key: string): string {
 
 /**
  * Question rate-limit key (passed into checkRateLimit, which wraps it via rateLimit()).
- * Final Redis key: "ratelimit:{question:abc123}"
+ * Scoped per-session so a new session always gives every student a fresh counter.
+ * Final Redis key: "ratelimit:{question:abc123:sessionXYZ}"
  */
-export function questionRateLimit(userId: string): string {
-  return `question:${userId}`;
+export function questionRateLimit(userId: string, sessionId: string): string {
+  return `question:${userId}:${sessionId}`;
 }
 
 /**

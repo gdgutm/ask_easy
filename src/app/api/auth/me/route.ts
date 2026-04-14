@@ -3,6 +3,7 @@ import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 
 import { getSessionOptions, type SessionData } from "@/lib/session";
+import { isAdmin } from "@/lib/adminWhitelist";
 
 // ---------------------------------------------------------------------------
 // GET /api/auth/me
@@ -28,5 +29,6 @@ export async function GET() {
     name: session.name,
     email: session.email,
     role: session.role,
+    isAdmin: isAdmin(session.utorid ?? ""),
   });
 }

@@ -114,6 +114,7 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [questionError, setQuestionError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
   const bottomRef = useRef<HTMLDivElement>(null);
   // Separate history that keeps deleted messages (marked as [deleted]) for the
   // session export. Never removes items — deletions are marked in-place.
@@ -354,7 +355,6 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
     };
 
     const onQuestionError = (payload: { message: string }) => {
-      console.error("[ClassChat] question:error", payload.message);
       setQuestionError(payload.message);
     };
 
@@ -417,7 +417,7 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
       socket.off("question:author:revealed", onQuestionAuthorRevealed);
       socket.off("answer:author:revealed", onAnswerAuthorRevealed);
     };
-  }, [socket, sessionId, chatHistoryRef]);
+  }, [socket, sessionId, chatHistoryRef, role, userId]);
 
   // Keep chatHistoryRef in sync whenever historyRef is updated via data load
   // or new questions/answers arriving (deletions update it inline above).

@@ -9,10 +9,12 @@ import OnboardingCarousel from "./components/OnboardingCarousel";
 import { STUDENT_ONBOARDING_STEPS, PROF_ONBOARDING_STEPS } from "@/constants/onboarding";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInitials, isLikelyAvatarImageUrl } from "@/utils/types";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp, LayoutDashboard } from "lucide-react";
+import Link from "next/link";
 
 export default function LandingPage() {
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export default function LandingPage() {
             pfp: data.name?.[0]?.toUpperCase() ?? data.utorid?.[0]?.toUpperCase() ?? "?",
             role,
           });
+          setIsAdmin(!!data.isAdmin);
 
           // Check for onboarding
           const seenToken = `hasSeenOnboarding_${role}`;
@@ -66,6 +69,15 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col dot-grid relative">
       <div className="absolute top-6 right-7 z-10 flex items-center gap-3">
+        {isAdmin && (
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1.5 px-3 h-10 text-sm font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 rounded-md transition-colors"
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            Dashboard
+          </Link>
+        )}
         <button
           className="w-10 h-10 flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-200/60 rounded-md transition-colors"
           onClick={() => setShowOnboarding(true)}
