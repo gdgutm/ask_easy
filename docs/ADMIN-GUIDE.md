@@ -1,48 +1,77 @@
 # AskEasy — Administrator Guide
 
-This document covers:
-
-1. How to access the data the application collects
-2. How to wipe student entries at the end of a term
-3. How Shibboleth SSO is connected to the VM
+This guide is for professors and system administrators who need to manage the platform — handling course cleanup at the end of a semester, controlling who has professor access, and accessing the database directly if needed.
 
 ---
 
-## 1. Accessing the Data
+## Role Control Files
 
-AskEasy stores all data in a **PostgreSQL 16** database. You can access it in two ways:
+Two plain-text files on the server control who can access what. Both live in the project root directory (`~/AskEasy/`).
 
-**Admin Dashboard (recommended):** Navigate to `/admin` in the app while logged in as a professor. The dashboard shows row counts for every table and previews of recent users, courses, and sessions.
+### `whitelist.txt` — who gets the Professor role
 
-**Direct database access:** SSH into the VM and open a psql shell:
+Any UTORid listed here is assigned the **PROFESSOR** role when they log in. Everyone else gets the **STUDENT** role by default.
+
+```
+# One UTORid per line. Lines starting with # are ignored.
+scalijad
+phintruong
+yousef10
+```
+
+When a professor logs in, the app reads this file and sets their role for that session. The role is re-checked on every login, so changes take effect the next time the user logs in.
+
+**To add a new professor:**
 
 ```bash
 ssh <your-utorid>@askeasy.utm.utoronto.ca
-docker exec -it ask_easy-postgres-1 psql -U postgres -d ask_easy
+echo "newutorid" >> ~/AskEasy/whitelist.txt
+docker restart ask_easy-app-1
 ```
 
-From there you can query any table (`\dt` lists them all). Type `\q` to exit.
+> The restart is needed because the app reads the whitelist at startup and caches it in memory.
 
-### Database Tables
-
-| Table | What it stores |
-|---|---|
-| `User` | Every person who has logged in (UTORid, name, email, role) |
-| `Course` | Courses created by professors (code, name, semester) |
-| `CourseEnrollment` | Which users belong to which courses (STUDENT / TA / PROFESSOR) |
-| `Session` | Live Q&A sessions within a course |
-| `Question` | Questions asked during sessions |
-| `Answer` | Answers to questions |
-| `QuestionUpvote` / `AnswerUpvote` | Upvote records |
-| `SlideSet` | Uploaded PDF slide files |
+**TAs are not listed here.** TAs are assigned per-course by professors through the app UI (see below). A TA has elevated permissions only within the specific course they're assigned to.
 
 ---
 
-## 2. Wiping Student Data at End of Term
+## Managing Courses Through the App
 
-Use the **Admin Dashboard** at `/admin`. It lets you select which tables to clear (e.g., just enrollments, just sessions, or everything) and handles the deletion order automatically. You must type `CONFIRM` before the clear button activates.
+Professors manage everything through the **Manage Lecture** modal on the `/classes` page. Click "Manage Lecture" on any course card to open it. It has four tabs:
 
-To also remove uploaded slide PDFs from disk:
+### Students tab
+
+- View the full student roster (searchable by name or UTORid)
+- **Remove** individual students by hovering their row and clicking the remove icon
+- **Add students** by typing one or more UTORids (comma, space, or newline separated)
+- **Sync roster from CSV** — upload a class list CSV exported from ACORN/ROSI. The app shows a preview of who will be added and removed before applying. TAs are not affected by a sync.
+
+### TAs tab
+
+- View and remove current TAs
+- Add new TAs by UTORid — same input format as students
+
+### Rename tab
+
+- Update the course code and/or semester label
+
+### Delete tab
+
+- Permanently deletes the course and everything under it: all sessions, questions, answers, upvotes, and uploaded slides
+- Requires typing the course code to confirm
+- **Blocked if the course has an active session** — end the session first
+
+---
+
+## End of Semester Cleanup
+
+### Step 1 — Delete courses through the app
+
+For each course you want to retire, go to `/classes`, open "Manage Lecture", go to the **Delete** tab, type the course code, and confirm. This cascades through the database and removes all associated sessions, Q&A data, enrollments, and slide records.
+
+### Step 2 — Remove uploaded slide files from disk
+
+Course deletion removes the database records for slides, but the PDF files themselves stay on disk. To free up space:
 
 ```bash
 ssh <your-utorid>@askeasy.utm.utoronto.ca
@@ -51,66 +80,64 @@ rm -rf ~/AskEasy/uploads/*
 
 ---
 
-## 3. Shibboleth SSO
+## Direct Database Access (VM Method)
 
-### Architecture
+If you need to inspect data directly or run a query the app UI doesn't support:
 
+```bash
+# SSH into the server
+ssh <your-utorid>@askeasy.utm.utoronto.ca
+
+# Open a psql shell inside the Postgres container
+docker exec -it ask_easy-postgres-1 psql -U postgres -d ask_easy
 ```
-Browser  ──HTTPS──▶  Apache + mod_shib  ──localhost──▶  Next.js App (Docker, :3000)
-                         │
-                         ▼
-                   U of T IdP (login page)
-```
 
-### Login Flow
+Useful psql commands:
 
-1. User visits `https://askeasy.utm.utoronto.ca`.
-2. Apache/mod_shib checks for a Shibboleth session. If none exists, it redirects to the U of T login page (`idpz.utorauth.utoronto.ca`).
-3. User logs in with their UTORid and password (same SSO as Quercus, ACORN, etc.).
-4. The IdP sends a SAML assertion back. mod_shib validates it and injects headers (`utorid`, `mail`, `cn`) into the request.
-5. Apache reverse-proxies to the Next.js app, which reads the `utorid` header and creates an encrypted session cookie (8-hour TTL).
+| Command | What it does |
+|---------|-------------|
+| `\dt` | List all tables |
+| `\q` | Exit psql |
+| `SELECT * FROM "User";` | See all users who have logged in |
+| `SELECT * FROM "Course";` | See all courses |
+| `SELECT * FROM "Session";` | See all sessions |
 
-### Spoofing Prevention
+### Database tables
 
-- **Apache** strips any client-supplied identity headers before mod_shib injects real ones (`RequestHeader unset ... early`).
-- **The app** (`src/server.ts`) also strips these headers from any non-localhost connection.
+| Table | What it stores |
+|-------|---------------|
+| `User` | Everyone who has logged in (UTORid, name, email, global role) |
+| `Course` | Courses created by professors |
+| `CourseEnrollment` | Which users are in which courses (STUDENT / TA / PROFESSOR) |
+| `Session` | Live Q&A sessions within a course |
+| `Question` | Questions asked during sessions |
+| `Answer` | Answers to questions |
+| `QuestionUpvote` / `AnswerUpvote` | Upvote records |
+| `SlideSet` | Uploaded PDF metadata (files live in `uploads/`) |
 
-### Key Files on the VM
+---
+
+## Shibboleth SSO
+
+### How login works
+
+1. User visits `https://askeasy.utm.utoronto.ca`
+2. Apache checks for a Shibboleth session. If there isn't one, it redirects to the U of T login page
+3. User logs in with their UTORid and password (same as Quercus, ACORN, etc.)
+4. The U of T identity provider sends back a SAML assertion. mod_shib validates it and injects `utorid`, `mail`, and `cn` headers into the request
+5. Apache proxies the request to the Next.js app, which reads those headers and creates an encrypted session cookie (8-hour TTL)
+
+### Header spoofing prevention
+
+- **Apache** strips any client-supplied identity headers before mod_shib injects the real ones
+- **The app** (`src/server.ts`) also strips these headers from any connection that isn't coming from localhost
+
+### Key files on the VM
 
 | File | Purpose |
-|---|---|
-| `/etc/apache2/sites-enabled/askeasy.conf` | Apache vhost (TLS, reverse proxy, Shibboleth directives) |
-| `/etc/shibboleth/shibboleth2.xml` | Shibboleth SP config (entity ID, IdP, metadata) |
+|------|---------|
+| `/etc/apache2/sites-enabled/askeasy.conf` | Apache vhost — TLS, reverse proxy, Shibboleth directives |
+| `/etc/shibboleth/shibboleth2.xml` | Shibboleth SP config — entity ID, IdP endpoint, metadata |
 | `/etc/shibboleth/utorauth_metadata_verify.crt` | U of T metadata signing certificate |
-| `/etc/letsencrypt/live/askeasy.utm.utoronto.ca/` | TLS certs (auto-renewed by certbot) |
-| `whitelist.txt` (project dir) | UTORids that get the PROFESSOR role |
-
-### Key shibboleth2.xml Settings
-
-```xml
-<ApplicationDefaults entityID="https://sp.utm.utoronto.ca/ask_easy"
-                     REMOTE_USER="utorid">
-  <SSO entityID="https://idpz.utorauth.utoronto.ca/shibboleth">SAML2</SSO>
-  <MetadataProvider type="XML"
-    url="https://md.sso.utoronto.ca/mda/ut-idp-metadata.xml"
-    backingFilePath="/var/cache/shibboleth/ut-idp-metadata.xml"
-    reloadInterval="3600">
-    <MetadataFilter type="Signature" verifyName="false"
-      certificate="/etc/shibboleth/utorauth_metadata_verify.crt"/>
-  </MetadataProvider>
-</ApplicationDefaults>
-```
-
-### How We Registered with U of T
-
-1. Installed `libapache2-mod-shib` and configured `shibboleth2.xml`.
-2. Started the shibd daemon.
-3. Fetched SP metadata: `curl https://askeasy.utm.utoronto.ca/Shibboleth.sso/Metadata > sp-metadata.xml`
-4. Emailed `sp-metadata.xml` to **shib.admin@utoronto.ca** to register.
-
-### Role Assignment
-
-- UTORid in `whitelist.txt` → PROFESSOR role.
-- Everyone else → STUDENT role.
-- TAs are assigned per-course by professors through the app UI.
-- To add a professor: `echo "utorid" >> ~/AskEasy/whitelist.txt && docker restart ask_easy-app-1`
+| `/etc/letsencrypt/live/askeasy.utm.utoronto.ca/` | TLS certificates (auto-renewed by certbot) |
+| `~/AskEasy/whitelist.txt` | UTORids that receive the PROFESSOR role |
