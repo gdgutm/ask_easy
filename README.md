@@ -1,27 +1,65 @@
 # AskEasy
 
-A real-time classroom Q&A platform that makes it easy for students to ask questions during lectures — and for instructors to keep the conversation organized. Built for the University of Toronto with Shibboleth (UTORid) authentication.
+A real-time classroom Q&A platform built for live lectures at the University of Toronto. Students post questions anonymously or publicly, upvote what matters most, and get answers from instructors — all updating instantly during class. Professors see exactly what the room is confused about, right now.
 
-## The Problem
+## Why AskEasy?
 
-In large lecture halls, many students hesitate to raise their hand or wait for a microphone. Questions go unasked, concepts stay unclear, and instructors lose visibility into what the class is struggling with. Existing tools like Piazza are designed for asynchronous discussion, not live, in-lecture interaction.
+In large lecture halls, most students never raise their hand. Questions go unasked, concepts go unclarified, and instructors are left guessing what landed and what didn't. Tools like Piazza are built for asynchronous discussion — not for the 50 minutes you're actually in the room.
 
-## The Solution
+AskEasy is built for that moment. It gives every lecture a live Q&A room where the most important questions surface automatically through upvoting, anonymous posting removes the social barrier to asking, and professors can present slides side-by-side with the chat without switching windows.
 
-AskEasy gives every lecture a live Q&A room where students can post questions (anonymously if they prefer), upvote the most pressing ones, and get answers from instructors or peers — all in real time via WebSockets. Professors and TAs see what the class needs help with *right now*, and can present slides side-by-side with the chat.
+---
 
-## Features
+## Architecture
 
-- **Real-time Q&A** — Questions, answers, and upvotes update instantly via Socket.IO with Redis pub/sub
-- **Role-based access** — Professors, TAs, and Students each see what's relevant to them; TAs are assigned per-course
-- **Anonymous posting** — Students can ask questions and post answers anonymously
-- **Upvoting** — The most important questions and best answers rise to the top
-- **Slide viewer** — Professors can upload PDFs and present slides alongside the live chat in a resizable split view
-- **Join codes** — Students join a session with a short code, no enrollment setup needed
-- **Question filtering** — Filter by status (open, answered, resolved) and visibility (public, instructor-only)
-- **Chat history export** — Professors can download the full Q&A transcript as a `.txt` file when ending a session
-- **Course management** — Create courses, manage enrollments, start/schedule/end sessions
-- **Shibboleth SSO** — Authenticates via UofT's identity provider; instructor whitelist controls professor access
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Production                           │
+│                                                             │
+│   Browser ──HTTPS──▶ Apache + mod_shib ──localhost──▶ App  │
+│                            │                                │
+│                            ▼                                │
+│                      U of T IdP (SAML)                      │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                     Application Layer                        │
+│                                                             │
+│   ┌──────────────────────────────────────────────────────┐  │
+│   │              Node.js Custom Server (server.ts)        │  │
+│   │                                                      │  │
+│   │   ┌─────────────────┐    ┌────────────────────────┐  │  │
+│   │   │  Next.js App    │    │   Socket.IO Server     │  │  │
+│   │   │  (App Router)   │    │   (real-time events)   │  │  │
+│   │   │  - Pages        │    │   - questions          │  │  │
+│   │   │  - API routes   │    │   - answers/upvotes    │  │  │
+│   │   │  - Auth         │    │   - slide sync         │  │  │
+│   │   └────────┬────────┘    └──────────┬─────────────┘  │  │
+│   └────────────┼──────────────────────── ┼───────────────┘  │
+└────────────────┼─────────────────────────┼──────────────────┘
+                 │                         │
+        ┌────────▼────────┐     ┌──────────▼──────────┐
+        │   PostgreSQL 16  │     │      Redis 7         │
+        │   (via Prisma)   │     │  - Socket.IO pub/sub │
+        │                  │     │  - Rate limiting     │
+        │  Users, Courses  │     │  - Answer mode TTL   │
+        │  Sessions, Q&A   │     │  - Session data      │
+        │  Upvotes, Slides │     └─────────────────────┘
+        └──────────────────┘
+```
+
+### How the pieces connect
+
+| Component | Role |
+|-----------|------|
+| **Custom server (`server.ts`)** | Single Node.js process that boots both Next.js and Socket.IO on the same port. Strips Shibboleth headers from non-localhost connections to prevent spoofing. |
+| **Next.js App Router** | Serves all pages and REST API routes (`/api/*`). Server Components fetch from PostgreSQL via Prisma; API routes handle auth, course/session management, and slide uploads. |
+| **Socket.IO** | Handles all real-time events (questions, answers, upvotes, slide page changes). Uses a Redis adapter so multiple app instances share the same pub/sub channel. |
+| **PostgreSQL + Prisma** | Single source of truth for all persistent data. Prisma handles the schema, migrations, and typed queries. |
+| **Redis** | Three jobs: Socket.IO pub/sub adapter, rate-limit counters (per-user sliding windows), and ephemeral answer-mode state (24-hour TTL). |
+| **Apache + mod_shib** *(prod only)* | Terminates TLS, enforces Shibboleth SSO, and injects `utorid`/`mail`/`cn` headers before proxying to the app. |
+
+---
 
 ## Tech Stack
 
@@ -36,15 +74,69 @@ AskEasy gives every lecture a live Q&A room where students can post questions (a
 | Testing | Vitest, Testing Library |
 | Containerization | Docker & Docker Compose |
 
-## Prerequisites
+---
+
+## Environment Variables
+
+### `.env` — used by Docker Compose and production
+
+```bash
+# PostgreSQL
+DATABASE_URL=postgresql://postgres:<password>@postgres:5432/ask_easy
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=<strong-password>
+POSTGRES_DB=ask_easy
+
+# Redis
+REDIS_URL=redis://:<redis-password>@redis:6379
+REDIS_PASSWORD=<redis-password>
+
+# Session encryption key — generate with: openssl rand -hex 32
+SESSION_SECRET=<64-char-hex>
+
+# Cron job auth (for /api/cron/cleanup-sessions)
+CRON_SECRET=<random-secret>
+```
+
+### `.env.local` — local dev only (overrides hosts to `localhost`)
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ask_easy
+REDIS_URL=redis://:changeme@localhost:6379
+
+# Fake SSO identity for local login
+DEV_UTORID=yourutorid
+DEV_NAME=Your Name
+DEV_EMAIL=your.email@mail.utoronto.ca
+DEV_ROLE=PROFESSOR   # or STUDENT
+```
+
+> **Note:** In Docker Compose the database and Redis hosts are the service names (`postgres`, `redis`). In `pnpm dev` they must be `localhost` because the app runs outside Docker.
+
+| Variable | Required | Description |
+|----------|:--------:|-------------|
+| `DATABASE_URL` | Yes | Prisma connection string |
+| `POSTGRES_USER` / `PASSWORD` / `DB` | Yes | Postgres container credentials |
+| `REDIS_URL` | Yes | Redis connection (include password if set) |
+| `REDIS_PASSWORD` | Yes (Docker) | Passed to the Redis container |
+| `SESSION_SECRET` | Yes | 64-char hex key for iron-session cookie encryption |
+| `CRON_SECRET` | Prod | Bearer token for the cleanup-sessions cron endpoint |
+| `DEV_UTORID` | Dev | Fake UTORid injected when Shibboleth is not present |
+| `DEV_NAME` | Dev | Display name for the fake dev user |
+| `DEV_EMAIL` | Dev | Email for the fake dev user |
+| `DEV_ROLE` | Dev | `PROFESSOR` or `STUDENT` — overrides whitelist lookup |
+
+---
+
+## Running Locally (Development)
+
+### Prerequisites
 
 - [Node.js](https://nodejs.org/) v20+
 - [pnpm](https://pnpm.io/) v8+
 - [Docker](https://www.docker.com/) and Docker Compose
 
-## Getting Started
-
-### 1. Clone and install
+### 1. Clone and install dependencies
 
 ```bash
 git clone https://github.com/jadenScali/ask_easy.git
@@ -52,49 +144,83 @@ cd ask_easy
 pnpm install
 ```
 
-### 2. Configure environment variables
+### 2. Configure environment
+
+Copy the example and edit as needed:
 
 ```bash
-cp .env.example .env
+cp .env .env.local
 ```
 
-For native development (`pnpm dev`), also create `.env.local` and point hosts at `localhost`:
+Set `DEV_UTORID`, `DEV_NAME`, and `DEV_ROLE` in `.env.local` to control which user you log in as during development. Set `DEV_ROLE=PROFESSOR` to access course management features.
 
-```
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ask_easy
-REDIS_URL=redis://:changeme@localhost:6379
-```
-
-| File | Used by | Hosts |
-|------|---------|-------|
-| `.env` | Docker Compose | `@postgres`, `@redis` (service names) |
-| `.env.local` | `pnpm dev` | `@localhost` |
-
-### 3. Start services
-
-**Option A — Full stack (app + database + Redis):**
-
-```bash
-docker-compose up
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-**Option B — Database & Redis only (for local dev):**
+### 3. Start the database and Redis
 
 ```bash
 docker-compose up -d postgres redis
-pnpm db:setup   # generate Prisma client + push schema
+```
+
+### 4. Set up the database schema
+
+```bash
+pnpm db:setup   # generates Prisma client and pushes schema
+```
+
+### 5. Start the dev server
+
+```bash
 pnpm dev
 ```
 
-> **Note:** `pnpm db:seed` currently resets all tables (deletes all data). There is no sample data seeder yet — create test users by logging in through the app.
+Open [http://localhost:3000](http://localhost:3000). The app auto-reloads on changes.
+
+---
+
+## Running in Production
+
+Production uses a pre-built Docker image from Docker Hub layered with the `docker-compose.prod.yml` override. This mounts the auth route, server entry, whitelist, and uploads directory from the host so they can be updated without rebuilding the image.
+
+### 1. Configure `.env`
+
+Create `.env` in the project root with production values (see [Environment Variables](#environment-variables) above). Use the Docker service names as hosts:
+
+```
+DATABASE_URL=postgresql://postgres:<password>@postgres:5432/ask_easy
+REDIS_URL=redis://:<redis-password>@redis:6379
+```
+
+### 2. Pull and start
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+This starts three containers: `app` (Next.js on port 3000, bound to `127.0.0.1`), `postgres`, and `redis`. The app is not publicly exposed — Apache sits in front of it.
+
+### 3. Apply database migrations
+
+```bash
+docker exec ask_easy-app-1 npx prisma migrate deploy
+```
+
+### 4. Set up Apache + Shibboleth (first time)
+
+Speak to UofT IT Admin.
+
+### Updating the running app
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml pull app
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d app
+```
+
+---
 
 ## Available Scripts
 
 | Script | Description |
 |--------|-------------|
-| `pnpm dev` | Start development server |
+| `pnpm dev` | Start development server with hot reload |
 | `pnpm build` | Build for production |
 | `pnpm start` | Start production server |
 | `pnpm lint` | Run ESLint |
@@ -102,39 +228,42 @@ pnpm dev
 | `pnpm test` | Run unit tests (Vitest) |
 | `pnpm test:integration` | Run integration tests |
 | `pnpm db:setup` | Generate Prisma client + push schema |
-| `pnpm db:seed` | Reset database (clears all tables) |
 | `pnpm db:migrate` | Run database migrations |
 | `pnpm db:studio` | Open Prisma Studio GUI |
+| `pnpm db:seed` | Reset database (clears all tables — destructive) |
+
+---
 
 ## Project Structure
 
 ```
 src/
 ├── app/                  # Next.js App Router pages & API routes
-│   ├── api/              # REST endpoints (auth, courses, sessions, questions)
+│   ├── api/              # REST endpoints (auth, courses, sessions, questions, cron)
 │   ├── classes/          # Course listing & management UI
 │   ├── create-class/     # Course creation flow
-│   └── room/             # Live session room (chat + slide viewer)
+│   ├── room/             # Live session room (chat + slide viewer)
+│   └── admin/            # Admin dashboard (data overview, table wipe)
 ├── components/ui/        # Shared UI components (Radix-based)
-├── lib/                  # Server utilities (auth, caching, validation, Prisma)
-├── socket/               # Socket.IO server setup, handlers, and middleware
-├── services/             # Business logic services
+├── lib/                  # Server utilities (auth, caching, validation, Prisma, Redis)
+├── socket/               # Socket.IO server setup, event handlers, middleware
+├── services/             # Business logic (sessions, questions, answers, slides)
 └── utils/                # Shared types and helpers
 prisma/
 ├── schema.prisma         # Database schema
 ├── migrations/           # Migration history
-└── seed.ts               # Development seed data
+└── seed.ts               # Resets all tables (dev use only)
 ```
+
+---
 
 ## Team
 
 Built by the AskEasy team at **GDG on Campus — UTM** (University of Toronto Mississauga).
 
+- Marwan Yousef
 - Jaden Scali
 - Phineas Truong
 - Jack Le
 - Jad El Asmar
 - Manjyot Birdi
-- Marwan Yousef
-
-
