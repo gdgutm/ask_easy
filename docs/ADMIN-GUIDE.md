@@ -6,7 +6,14 @@ This guide is for professors and system administrators who need to manage the pl
 
 ## Role Control Files
 
-Two plain-text files on the server control who can access what. Both live in the project root directory (`~/AskEasy/`).
+Three plain-text files on the server control who can do what. All three live in the project root directory (`~/AskEasy/`).
+
+| File | What it controls |
+|------|-----------------|
+| `whitelist.txt` | Who gets the **PROFESSOR** role in the app |
+| `admin_whitelist.txt` | Who can access the **Admin Dashboard** at `/dashboard` |
+
+Both files are read once at server startup and cached in memory. A restart is required to pick up any changes.
 
 ### `whitelist.txt` — who gets the Professor role
 
@@ -14,24 +21,154 @@ Any UTORid listed here is assigned the **PROFESSOR** role when they log in. Ever
 
 ```
 # One UTORid per line. Lines starting with # are ignored.
-scalijad
-phintruong
+scalij
+phintr
 yousef10
 ```
 
-When a professor logs in, the app reads this file and sets their role for that session. The role is re-checked on every login, so changes take effect the next time the user logs in.
+The role is checked on every login, so changes take effect the next time the user logs in.
 
 **To add a new professor:**
 
 ```bash
-ssh <your-utorid>@askeasy.utm.utoronto.ca
+ssh easy@redacted_ip
 echo "newutorid" >> ~/AskEasy/whitelist.txt
 docker restart ask_easy-app-1
 ```
 
-> The restart is needed because the app reads the whitelist at startup and caches it in memory.
+**TAs are not listed here.** TAs are assigned per-course by professors through the app UI. A TA has elevated permissions only within the specific course they're assigned to.
 
-**TAs are not listed here.** TAs are assigned per-course by professors through the app UI (see below). A TA has elevated permissions only within the specific course they're assigned to.
+### `admin_whitelist.txt` — who can access the Admin Dashboard
+
+Any UTORid listed here gains access to the `/dashboard` admin panel. They must also be a PROFESSOR (i.e., also in `whitelist.txt`) for their role to function correctly, but the dashboard itself only checks this file.
+
+```
+# One UTORid per line. Lines starting with # are ignored.
+yousef10
+```
+
+**To add a new admin:**
+
+```bash
+ssh easy@redacted_ip
+echo "newutorid" >> ~/AskEasy/admin_whitelist.txt
+docker restart ask_easy-app-1
+```
+
+Anyone not in this file who tries to visit `/dashboard` is silently redirected to the home page.
+
+---
+
+## Admin Dashboard (`/dashboard`)
+
+The **Dashboard** link appears in the **top-right corner of the home page** — but only if your UTORid is in `admin_whitelist.txt`. It is invisible to everyone else. Visiting `/dashboard` without being on the admin list silently redirects you to the home page.
+
+### Stats bar
+
+At the top of the page, seven live counters give you a snapshot of the platform:
+
+| Counter | What it shows |
+|---------|--------------|
+| Total Users | Everyone who has ever logged in |
+| Total Courses | All courses ever created |
+| Active Sessions | Sessions currently live |
+| Total Sessions | All sessions ever created |
+| Total Questions | All questions ever asked |
+| Total Answers | All answers ever posted |
+| Enrollments | Total course membership records |
+
+Click **Refresh** (top right of the page) to reload the counts and all table data.
+
+---
+
+### Overview tab
+
+The landing tab when you open the dashboard. It has:
+
+- A reminder about how deletions cascade (e.g. deleting a user removes their questions, answers, and enrollments; deleting a course removes all its sessions and questions)
+- The **Danger Zone** — a "Delete Everything" button that wipes the entire database in one action. Requires typing `DELETE EVERYTHING` to confirm. Use this at the end of a term to fully reset the platform.
+
+---
+
+### Users tab
+
+**Columns:** Name, UTORid, Email, Role
+
+**Filters:**
+- Search by name or UTORid
+- Filter by role (Student / TA / Professor)
+
+**Actions:**
+- Delete a single user — removes the user and all their questions, answers, and enrollments across the platform
+- **Delete All Users** button — requires typing `DELETE USERS` to confirm; wipes every user record
+
+---
+
+### Courses tab
+
+**Columns:** Code, Name, Semester, Created By, Enrollment count, Session count
+
+**Filters:**
+- Search by course code or name
+
+**Actions:**
+- Delete a single course — cascades to all its sessions, questions, answers, enrollments, and slides
+- **Delete All Courses** button — requires typing `DELETE COURSES` to confirm
+
+---
+
+### Sessions tab
+
+**Columns:** Title, Course, Status (ACTIVE / ENDED), Created By, Question count, Created date
+
+**Filters:**
+- Search by session title
+- Filter by status (Active / Scheduled / Ended)
+
+**Actions:**
+- Delete a single session — removes all its questions, answers, and uploaded slides
+- **Delete All Sessions** button — requires typing `DELETE SESSIONS` to confirm
+
+> Deleting sessions here is the recommended way to clear old Q&A data at end of term without touching users or courses.
+
+---
+
+### Slide Sets tab
+
+**Columns:** Metadata for every uploaded PDF, linked to its session
+
+**Actions:**
+- Delete individual slide set records
+- **Delete All Slide Sets** button
+
+> Note: deleting a slide set record here removes it from the database but does **not** delete the PDF file from disk. To free disk space, also run `rm -rf ~/AskEasy/uploads/*` on the VM.
+
+---
+
+### Questions tab
+
+**Columns:** Question content, session, author, status, timestamps
+
+**Actions:**
+- Delete individual questions
+- **Delete All Questions** button
+
+---
+
+### Enrollments tab
+
+**Columns:** User name, UTORid, Course, Role (Student / TA / Professor)
+
+**Filters:**
+- Search by name, UTORid, or course code
+- Filter by role
+
+**Actions:**
+- Remove a single enrollment (removes the user from that course only, does not delete the user)
+- **Delete All Enrollments** button — requires typing `DELETE ENROLLMENTS` to confirm
+- Supports **Load More** pagination (loads 50 at a time)
+
+> Deleting all enrollments at end of term is a clean way to reset course rosters while keeping user accounts intact.
 
 ---
 
@@ -86,7 +223,7 @@ If you need to inspect data directly or run a query the app UI doesn't support:
 
 ```bash
 # SSH into the server
-ssh <your-utorid>@askeasy.utm.utoronto.ca
+ssh easy@redacted_ip
 
 # Open a psql shell inside the Postgres container
 docker exec -it ask_easy-postgres-1 psql -U postgres -d ask_easy
@@ -141,3 +278,4 @@ Useful psql commands:
 | `/etc/shibboleth/utorauth_metadata_verify.crt` | U of T metadata signing certificate |
 | `/etc/letsencrypt/live/askeasy.utm.utoronto.ca/` | TLS certificates (auto-renewed by certbot) |
 | `~/AskEasy/whitelist.txt` | UTORids that receive the PROFESSOR role |
+| `~/AskEasy/admin_whitelist.txt` | UTORids that can access the `/dashboard` admin panel |
