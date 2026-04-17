@@ -257,6 +257,8 @@ whitelist.txt
 admin_whitelist.txt
 ```
 
+Check out docs/admin_whitelist.txt for more details on setting up admin permissions.
+
 ---
 
 ## Team
