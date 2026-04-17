@@ -253,6 +253,8 @@ prisma/
 ├── schema.prisma         # Database schema
 ├── migrations/           # Migration history
 └── seed.ts               # Resets all tables (dev use only)
+whitelist.txt
+admin_whitelist.txt
 ```
 
 ---
