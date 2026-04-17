@@ -49,3 +49,10 @@ const ADMIN_WHITELIST: Set<string> = loadAdminWhitelist();
 export function isAdmin(utorid: string): boolean {
   return ADMIN_WHITELIST.has(utorid.toLowerCase());
 }
+
+/**
+ * Returns all admin UTORids as an array.
+ */
+export function getAdminUtorids(): string[] {
+  return Array.from(ADMIN_WHITELIST);
+}

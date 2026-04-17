@@ -38,10 +38,11 @@ export async function GET(request: NextRequest) {
     // The server strips them from external connections (see server.ts), so
     // they can be trusted here.
     utorid = request.headers.get("utorid");
-    name =
-      request.headers.get("cn") ??
-      request.headers.get("displayname") ??
-      request.headers.get("utorid");
+    const rawCn = request.headers.get("cn");
+    // Strip double-quotes and collapse whitespace to handle LDAP-formatted
+    // names like `"First Middle" "Last"` → `First Middle Last`
+    const sanitizedCn = rawCn ? rawCn.replace(/"/g, "").replace(/\s+/g, " ").trim() : null;
+    name = sanitizedCn || request.headers.get("displayname") || request.headers.get("utorid");
     email = request.headers.get("mail") ?? request.headers.get("email");
   }
 
