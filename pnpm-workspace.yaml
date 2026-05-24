@@ -3,4 +3,6 @@ packages:
 
 nodeLinker: hoisted
 
-onlyBuiltDependencies: '["@prisma/engines", "prisma"]'
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - prisma
