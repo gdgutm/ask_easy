@@ -176,14 +176,6 @@ export default function ChatHeader({
                     <UserPlus className="w-4 h-4" />
                   </button>
                 )}
-                <Link
-                  href="/"
-                  aria-label="Back to home"
-                  className="inline-flex items-center gap-1.5 rounded-md h-9 px-3 text-sm font-medium text-stone-700 bg-stone-200 hover:bg-stone-300 transition-colors"
-                >
-                  Back
-                  <ArrowBigRight className="w-4 h-4" />
-                </Link>
               </div>
             </>
           )}
