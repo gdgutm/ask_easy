@@ -15,7 +15,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AskEasy",
   description: "Real-time classroom Q&A and lecture platform",
-  keywords: ["classroom", "Q&A", "questions", "answers", "lecture", "interactive learning", "student engagement", "real-time"],
+  keywords: [
+    "classroom",
+    "Q&A",
+    "questions",
+    "answers",
+    "lecture",
+    "interactive learning",
+    "student engagement",
+    "real-time",
+  ],
   authors: [{ name: "AskEasy Team" }],
   robots: {
     index: true,

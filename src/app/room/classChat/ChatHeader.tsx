@@ -2,20 +2,11 @@
 
 import { Input } from "@/components/ui/input";
 import { useContext, useState } from "react";
-import {
-  PanelRightClose,
-  Users,
-  GraduationCap,
-  Search,
-  X,
-  ArrowBigRight,
-  UserPlus,
-} from "lucide-react";
+import { PanelRightClose, Users, GraduationCap, Search, X, UserPlus } from "lucide-react";
 import ManageTAsModal from "./ManageTAsModal";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { SlideUpdateContext } from "../SlideUpdateContext";
 import type { Role } from "@/utils/types";
-import Link from "next/link";
 
 interface ChatHeaderProps {
   role: Role;
