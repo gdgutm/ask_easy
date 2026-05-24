@@ -1,4 +1,8 @@
 packages:
   - .
 
-onlyBuiltDependencies: '["@prisma/engines", "prisma"]'
+nodeLinker: hoisted
+
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - prisma

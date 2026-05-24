@@ -1,3 +1,4 @@
+Hey
 # AskEasy
 
 A real-time classroom Q&A platform built for live lectures at the University of Toronto. Students post questions anonymously or publicly, upvote what matters most, and get answers from instructors — all updating instantly during class. Professors see exactly what the room is confused about, right now.
@@ -16,17 +17,17 @@ AskEasy is built for that moment. It gives every lecture a live Q&A room where t
 ┌─────────────────────────────────────────────────────────────┐
 │                        Production                           │
 │                                                             │
-│   Browser ──HTTPS──▶ Apache + mod_shib ──localhost──▶ App  │
+│   Browser ──HTTPS──▶ Apache + mod_shib ──localhost──▶ App   │
 │                            │                                │
 │                            ▼                                │
 │                      U of T IdP (SAML)                      │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                     Application Layer                        │
+│                     Application Layer                       │
 │                                                             │
 │   ┌──────────────────────────────────────────────────────┐  │
-│   │              Node.js Custom Server (server.ts)        │  │
+│   │              Node.js Custom Server (server.ts)       │  │
 │   │                                                      │  │
 │   │   ┌─────────────────┐    ┌────────────────────────┐  │  │
 │   │   │  Next.js App    │    │   Socket.IO Server     │  │  │

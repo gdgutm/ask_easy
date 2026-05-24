@@ -2,20 +2,11 @@
 
 import { Input } from "@/components/ui/input";
 import { useContext, useState } from "react";
-import {
-  PanelRightClose,
-  Users,
-  GraduationCap,
-  Search,
-  X,
-  ArrowBigRight,
-  UserPlus,
-} from "lucide-react";
+import { PanelRightClose, Users, GraduationCap, Search, X, UserPlus } from "lucide-react";
 import ManageTAsModal from "./ManageTAsModal";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { SlideUpdateContext } from "../SlideUpdateContext";
 import type { Role } from "@/utils/types";
-import Link from "next/link";
 
 interface ChatHeaderProps {
   role: Role;
@@ -176,14 +167,6 @@ export default function ChatHeader({
                     <UserPlus className="w-4 h-4" />
                   </button>
                 )}
-                <Link
-                  href="/"
-                  aria-label="Back to home"
-                  className="inline-flex items-center gap-1.5 rounded-md h-9 px-3 text-sm font-medium text-stone-700 bg-stone-200 hover:bg-stone-300 transition-colors"
-                >
-                  Back
-                  <ArrowBigRight className="w-4 h-4" />
-                </Link>
               </div>
             </>
           )}

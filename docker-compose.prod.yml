@@ -9,6 +9,7 @@ services:
       - ./src/server.ts:/app/src/server.ts:ro
       - ./src/app/api/auth/session/route.ts:/app/src/app/api/auth/session/route.ts:ro
       - ./whitelist.txt:/app/whitelist.txt:ro
+      - ./admin_whitelist.txt:/app/admin_whitelist.txt:ro
       - ./uploads:/app/uploads
     env_file: .env
     environment:
