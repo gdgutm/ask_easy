@@ -36,12 +36,6 @@
   "prisma": {
     "seed": "pnpm run db:seed"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/engines",
-      "prisma"
-    ]
-  },
   "dependencies": {
     "@embedpdf/core": "^2.3.0",
     "@embedpdf/engines": "^2.3.0",
