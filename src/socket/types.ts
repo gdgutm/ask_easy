@@ -1,6 +1,9 @@
 export interface SocketData {
   userId: string;
+  /** Global User.role from the session cookie — not course-scoped. */
   role: string;
+  /** CourseEnrollment.role for the current session's course; set on session:join. */
+  courseRole?: string;
   connectedAt: Date;
   currentSessionId?: string;
 }
