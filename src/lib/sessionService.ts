@@ -275,9 +275,11 @@ export async function validateProfessorRole(
 /**
  * Creates a new session for a course.
  * Validates professor role and generates unique join code.
+ * If the course already has an ACTIVE session, returns that one instead of
+ * creating a duplicate (co-professors must share one live room).
  *
  * @param data - Session creation data (courseId, title, userId)
- * @returns Result with created session or error
+ * @returns Result with created (or existing) session or error
  */
 export async function createSession(data: SessionCreateInput): Promise<SessionCreateResult> {
   const { courseId, title, userId } = data;
@@ -290,6 +292,26 @@ export async function createSession(data: SessionCreateInput): Promise<SessionCr
       error: roleValidation.error,
       statusCode: roleValidation.statusCode,
     };
+  }
+
+  const sessionSelect = {
+    id: true,
+    title: true,
+    joinCode: true,
+    status: true,
+    courseId: true,
+    createdById: true,
+    createdAt: true,
+  } as const;
+
+  // One live session per course — join the existing one if a co-prof already started it.
+  const existing = await prisma.session.findFirst({
+    where: { courseId, status: "ACTIVE" },
+    select: sessionSelect,
+    orderBy: { startTime: "desc" },
+  });
+  if (existing) {
+    return { success: true, session: existing };
   }
 
   // Generate unique join code (cryptographically secure)
@@ -306,15 +328,7 @@ export async function createSession(data: SessionCreateInput): Promise<SessionCr
       isSubmissionsEnabled: true,
       startTime: new Date(),
     },
-    select: {
-      id: true,
-      title: true,
-      joinCode: true,
-      status: true,
-      courseId: true,
-      createdById: true,
-      createdAt: true,
-    },
+    select: sessionSelect,
   });
 
   return {
