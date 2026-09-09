@@ -4,8 +4,8 @@
  * Spins up N professor, M TA, and K student dev servers so multi-user flows
  * can be tested in multiple tabs of one browser window.
  *
- *   pnpm dev:all              → 1 prof, 1 TA, 1 student (default)
- *   pnpm dev:all -- 2 1 3     → 2 profs, 1 TA, 3 students
+ *   pnpm dev:all          → 1 prof, 1 TA, 1 student (default)
+ *   pnpm dev:all 2 1 3    → 2 profs, 1 TA, 3 students
  *
  * Default layout (1 of each):
  *   PROF     -> http://localhost:3000   askeasy-dev-prof
@@ -101,13 +101,14 @@ interface ResolvedPersona {
 const warnings: string[] = [];
 const errors: string[] = [];
 
-/** Parse `pnpm dev:all -- <profs> <tas> <students>`. Default 1 1 1. */
+/** Parse `pnpm dev:all <profs> <tas> <students>`. Default 1 1 1. */
 function parseCounts(argv: string[]): { profs: number; tas: number; students: number } {
-  const args = argv.slice(2);
+  // Ignore a literal "--" if someone still uses the npm-style separator.
+  const args = argv.slice(2).filter((a) => a !== "--");
   if (args.length === 0) return { profs: 1, tas: 1, students: 1 };
 
   if (args.length !== 3) {
-    errors.push("Usage: pnpm dev:all -- <profs> <tas> <students>   (e.g. pnpm dev:all -- 2 1 3)");
+    errors.push("Usage: pnpm dev:all <profs> <tas> <students>   (e.g. pnpm dev:all 2 1 3)");
     return { profs: 0, tas: 0, students: 0 };
   }
 

@@ -198,11 +198,17 @@ Open [http://localhost:3000](http://localhost:3000). The app auto-reloads on cha
 
 A single dev server can only ever be one user — identity comes from `DEV_UTORID` /
 `DEV_NAME` / `DEV_ROLE`, which are process-global. To test a student asking a question
-while a professor answers it, run three instances at once:
+while a professor answers it, run multiple instances at once:
 
 ```bash
-pnpm dev:all
+pnpm dev:all          # 1 professor, 1 TA, 1 student (default)
+pnpm dev:all 2 1 3    # 2 professors, 1 TA, 3 students
 ```
+
+Pass three non-negative integers: `<profs> <tas> <students>`. Omit them to get one of
+each. Ports are assigned sequentially from `3000`.
+
+Default layout (1 of each):
 
 | Persona   | URL                   | Cookie                |
 | --------- | --------------------- | --------------------- |
@@ -210,10 +216,10 @@ pnpm dev:all
 | `TA`      | http://localhost:3001 | `askeasy-dev-ta`      |
 | `STUDENT` | http://localhost:3002 | `askeasy-dev-student` |
 
-Open all three in tabs of the same window. Each instance gets its own session cookie
+Open the instances in tabs of the same window. Each instance gets its own session cookie
 name, so they don't clobber each other — browser cookies are keyed by host and ignore
 the port, meaning a single shared name would make every tab become whoever logged in
-last. All three share one Postgres and one Redis, which is what lets events broadcast
+last. All instances share one Postgres and one Redis, which is what lets events broadcast
 between them.
 
 Configure each persona in `.env` (all optional — anything missing falls back to a
@@ -233,6 +239,10 @@ DEV_STUDENT_NAME=Dev Student
 DEV_STUDENT_ROLE=STUDENT
 ```
 
+Extra instances of a role (e.g. a second professor) use numbered defaults (`devprof2`)
+and can be overridden with `DEV_PROF_2_UTORID` / `_NAME` / `_ROLE` / `_EMAIL` (same
+pattern for `TA` and `STUDENT`).
+
 Notes:
 
 - `DEV_ROLE` overrides the whitelist lookup, so the PROF persona does **not** need to be
@@ -241,12 +251,11 @@ Notes:
 - Leave `SOCKET_IO_USE_REDIS` unset. With the adapter disabled, events don't cross
   instances: a question asked in one tab won't appear in the others until you refresh.
 - Each instance runs its own Next compiler against its own build dir (`.next-prof`,
-  `.next-ta`, `.next-student`), so expect roughly 3× the memory and CPU of `pnpm dev`.
+  `.next-ta`, `.next-student`, …), so expect roughly N× the memory and CPU of `pnpm dev`.
 - Instances start one at a time rather than all at once. Next rewrites `next-env.d.ts`
   during startup and each instance wants its own build dir in it, so concurrent
   startups interleave those writes and corrupt the file — which then breaks
-  `pnpm typecheck` and the pre-commit hook. Startup therefore takes about three
-  times as long as `pnpm dev`.
+  `pnpm typecheck` and the pre-commit hook. Startup therefore scales with instance count.
 - `pnpm dev` is unaffected and still uses the `ask_easy_session` cookie, so switching
   between the two modes won't log you out of either.
 
