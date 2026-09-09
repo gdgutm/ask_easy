@@ -120,7 +120,7 @@ export default function PreviewClass({
           value={professorsInput}
           spellCheck={false}
           onChange={(e) => onProfessorsChange(e.target.value)}
-          placeholder={"smithj, doejohn"}
+          placeholder={"smithj, doejohn, pannugun"}
           rows={3}
           className="w-full border-2 border-stone-100 rounded-md px-4 py-3 text-sm font-mono resize-none focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all shadow-sm"
         />

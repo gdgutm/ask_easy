@@ -766,7 +766,7 @@ export default function ManageClassModal({
                       setProfessorAddResult(null);
                       setProfessorAddError(null);
                     }}
-                    placeholder={"smithj, doejohn"}
+                    placeholder={"smithj, doejohn, pannugun"}
                     rows={3}
                     className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
                   />
