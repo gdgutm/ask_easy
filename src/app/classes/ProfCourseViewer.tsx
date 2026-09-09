@@ -33,7 +33,12 @@ interface ActiveSession {
   courseId: string;
 }
 
-export default function ProfCourseButtons() {
+interface ProfCourseButtonsProps {
+  /** Global professors may create courses; course-only co-professors may not. */
+  canCreateClass?: boolean;
+}
+
+export default function ProfCourseButtons({ canCreateClass = true }: ProfCourseButtonsProps) {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [activeSessions, setActiveSessions] = useState<Map<string, ActiveSession>>(new Map());
@@ -164,13 +169,15 @@ export default function ProfCourseButtons() {
               </p>
             </div>
 
-            <Link
-              href="/create-class"
-              className="hidden sm:flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
-            >
-              <PlusCircle className="w-5 h-5" />
-              Create Lecture
-            </Link>
+            {canCreateClass && (
+              <Link
+                href="/create-class"
+                className="hidden sm:flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
+              >
+                <PlusCircle className="w-5 h-5" />
+                Create Lecture
+              </Link>
+            )}
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto relative">
@@ -297,15 +304,17 @@ export default function ProfCourseButtons() {
             })}
           </div>
 
-          <div className="max-w-6xl mx-auto w-full mt-8 sm:hidden">
-            <Link
-              href="/create-class"
-              className="flex items-center justify-center gap-2 w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-all shadow-sm"
-            >
-              <PlusCircle className="w-5 h-5" />
-              Create New Lecture
-            </Link>
-          </div>
+          {canCreateClass && (
+            <div className="max-w-6xl mx-auto w-full mt-8 sm:hidden">
+              <Link
+                href="/create-class"
+                className="flex items-center justify-center gap-2 w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-all shadow-sm"
+              >
+                <PlusCircle className="w-5 h-5" />
+                Create New Lecture
+              </Link>
+            </div>
+          )}
         </div>
 
         {managingCourse && (
@@ -327,17 +336,20 @@ export default function ProfCourseButtons() {
       </div>
       <h1 className="font-bold text-3xl text-stone-900 tracking-tight mb-2">No Lectures Yet</h1>
       <p className="text-stone-500 text-lg max-w-md text-center mb-8">
-        You haven&apos;t created any lectures. Create your first lecture to get started with
-        AskEasy.
+        {canCreateClass
+          ? "You haven't created any lectures. Create your first lecture to get started with AskEasy."
+          : "You aren't assigned as a professor on any lectures yet."}
       </p>
 
-      <Link
-        href="/create-class"
-        className="flex items-center gap-2 px-8 py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-md transition-all shadow-md hover:shadow-lg hover:-translate-y-1 text-lg"
-      >
-        <PlusCircle className="w-6 h-6" />
-        Create a Lecture
-      </Link>
+      {canCreateClass && (
+        <Link
+          href="/create-class"
+          className="flex items-center gap-2 px-8 py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-md transition-all shadow-md hover:shadow-lg hover:-translate-y-1 text-lg"
+        >
+          <PlusCircle className="w-6 h-6" />
+          Create a Lecture
+        </Link>
+      )}
     </div>
   );
 }
