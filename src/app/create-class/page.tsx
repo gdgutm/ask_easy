@@ -19,6 +19,7 @@ export default function CreateClassPage() {
   const [file, setFile] = useState<File | null>(null);
   const [processedData, setProcessedData] = useState<ProcessedClassData | null>(null);
   const [tasInput, setTasInput] = useState("");
+  const [professorsInput, setProfessorsInput] = useState("");
   const [courseCodeInput, setCourseCodeInput] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -56,6 +57,7 @@ export default function CreateClassPage() {
     setFile(null);
     setProcessedData(null);
     setTasInput("");
+    setProfessorsInput("");
     setCourseCodeInput("");
     setSubmitError(null);
   };
@@ -68,6 +70,10 @@ export default function CreateClassPage() {
       .split(/[\n,\s]+/)
       .map((s) => s.trim())
       .filter(Boolean);
+    const professors = professorsInput
+      .split(/[\n,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     try {
       const res = await fetch("/api/courses", {
@@ -77,6 +83,7 @@ export default function CreateClassPage() {
           code: courseCodeInput.trim() || processedData.courseCode,
           students: processedData.students,
           ...(tas.length > 0 ? { tas } : {}),
+          ...(professors.length > 0 ? { professors } : {}),
         }),
       });
       const data = await res.json();
@@ -149,6 +156,8 @@ export default function CreateClassPage() {
               processedData={processedData}
               onClear={clearFile}
               onSubmit={submitting ? () => {} : submitClassCreation}
+              professorsInput={professorsInput}
+              onProfessorsChange={setProfessorsInput}
               tasInput={tasInput}
               onTasChange={setTasInput}
               courseCodeInput={courseCodeInput}
