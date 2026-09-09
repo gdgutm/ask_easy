@@ -150,7 +150,7 @@ function RoomInner() {
 
   const isMdSize = useMediaQuery("(min-width: 1024px)");
   const [isSlidesVisible, setIsSlidesVisible] = useState(true);
-  const [resizableWidth, setResizableWidth] = useState(30);
+  const [resizableWidth, setResizableWidth] = useState(32);
 
   const [userId, setUserId] = useState("");
   const [role, setRole] = useState<Role>("STUDENT");
@@ -409,7 +409,7 @@ function RoomInner() {
                   />
                 </ResizablePanel>
                 <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={resizableWidth} minSize={30}>
+                <ResizablePanel defaultSize={resizableWidth} minSize={32}>
                   <ClassChat chatHistoryRef={chatHistoryRef} />
                 </ResizablePanel>
               </ResizablePanelGroup>

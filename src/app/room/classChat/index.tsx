@@ -126,11 +126,12 @@ interface ClassChatProps {
 }
 
 export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
-  const { socket, sessionId, userId, role, slideContextRef } = useRoom();
+  const { socket, sessionId, userId, role, slideContextRef, sessionTitle } = useRoom();
 
   const [commentView, setCommentView] = useState<"all" | "unresolved" | "resolved">("all");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answerMode, setAnswerMode] = useState<"all" | "instructors_only">("instructors_only");
+  const [notificationMode, setNotificationMode] = useState<"off" | "sound" | "browser">("off");
   const [globalIsAnonymous, setGlobalIsAnonymous] = useState(false);
   const [includeSlideContext, setIncludeSlideContext] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -143,6 +144,59 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
   // Separate history that keeps deleted messages (marked as [deleted]) for the
   // session export. Never removes items — deletions are marked in-place.
   const historyRef = useRef<Question[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const playQuestionBeep = (mode = notificationMode) => {
+    if (mode === "off" || typeof window === "undefined") return;
+
+    const audioContext = audioContextRef.current ?? new window.AudioContext();
+    audioContextRef.current = audioContext;
+    if (audioContext.state === "suspended") {
+      void audioContext.resume().catch(() => {});
+    }
+
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    const now = audioContext.currentTime;
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, now);
+    gainNode.gain.setValueAtTime(0.0001, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.14, now + 0.01);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.18);
+  };
+
+  const requestBrowserNotificationPermission = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) return false;
+    if (Notification.permission === "granted") return true;
+    if (Notification.permission === "denied") return false;
+
+    try {
+      return (await Notification.requestPermission()) === "granted";
+    } catch {
+      return false;
+    }
+  };
+
+  const showBrowserNotification = (
+    title: string,
+    body: string,
+    tag: string,
+    mode = notificationMode
+  ) => {
+    if (mode !== "browser" || typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    if (document.visibilityState === "visible" && document.hasFocus()) return;
+
+    const notification = new Notification(title, { body, tag });
+
+    setTimeout(() => notification.close(), 5000);
+  };
 
   // -------------------------------------------------------------------------
   // Initial data fetch
@@ -243,6 +297,18 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
 
       setQuestions((prev) => [...prev, newQuestion]);
       historyRef.current = [...historyRef.current, { ...newQuestion, replies: [] }];
+      if (!payload.isMine) {
+        const author =
+          newQuestion.isAnonymous || !newQuestion.user?.username
+            ? "Anonymous"
+            : newQuestion.user.username;
+        playQuestionBeep();
+        showBrowserNotification(
+          sessionTitle || "New question",
+          `${author}: ${newQuestion.content}`,
+          `question-${newQuestion.id}`
+        );
+      }
       if (payload.isMine) setScrollTargetId(payload.id);
     };
 
@@ -298,6 +364,12 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
         isMine: payload.isMine,
       };
       const newReply = apiAnswerToPost(apiAnswer);
+      const question = historyRef.current.find((q) => q.id === payload.questionId);
+      const isFollowUpOnMyThread =
+        !payload.isMine &&
+        (question?.isMine === true || question?.replies.some((reply) => isOwnPost(reply)) === true);
+      const replyAuthor =
+        newReply.isAnonymous || !newReply.user?.username ? "Anonymous" : newReply.user.username;
 
       setQuestions((prev) =>
         prev.map((q) =>
@@ -307,6 +379,14 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
       historyRef.current = historyRef.current.map((q) =>
         q.id === payload.questionId ? { ...q, replies: [...q.replies, { ...newReply }] } : q
       );
+      if (isFollowUpOnMyThread) {
+        playQuestionBeep();
+        showBrowserNotification(
+          sessionTitle || "New reply",
+          `${replyAuthor} replied: ${newReply.content}`,
+          `answer-${newReply.id}`
+        );
+      }
     };
 
     const onAnswerUpdated = (payload: { id: string; questionId: string; upvoteCount: number }) => {
@@ -465,7 +545,7 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
       socket.off("question:author:revealed", onQuestionAuthorRevealed);
       socket.off("answer:author:revealed", onAnswerAuthorRevealed);
     };
-  }, [socket, sessionId, chatHistoryRef, role, userId]);
+  }, [socket, sessionId, chatHistoryRef, role, userId, notificationMode]);
 
   // Keep chatHistoryRef in sync whenever historyRef is updated via data load
   // or new questions/answers arriving (deletions update it inline above).
@@ -556,6 +636,16 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
     setAnswerMode(newMode); // Optimistic update
   };
 
+  const handleToggleNotificationMode = () => {
+    const nextMode =
+      notificationMode === "off" ? "sound" : notificationMode === "sound" ? "browser" : "off";
+    setNotificationMode(nextMode);
+    if (nextMode !== "off") playQuestionBeep(nextMode);
+    if (nextMode === "browser") {
+      void requestBrowserNotificationPermission();
+    }
+  };
+
   const handleDeleteQuestion = (questionId: string) => {
     if (!socket) return;
     socket.emit("question:delete", { questionId, sessionId });
@@ -643,6 +733,8 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
       <ChatHeader
         role={role}
         answerMode={answerMode}
+        notificationMode={notificationMode}
+        onToggleNotificationMode={handleToggleNotificationMode}
         onToggleAnswerMode={handleToggleAnswerMode}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}

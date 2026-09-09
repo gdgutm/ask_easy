@@ -2,7 +2,18 @@
 
 import { Input } from "@/components/ui/input";
 import { useContext, useState } from "react";
-import { PanelRightClose, Users, GraduationCap, Search, X, UserPlus, Undo2 } from "lucide-react";
+import {
+  PanelRightClose,
+  Users,
+  GraduationCap,
+  Search,
+  X,
+  UserPlus,
+  Undo2,
+  VolumeOff,
+  Volume2,
+  BellRing,
+} from "lucide-react";
 import ManageTAsModal from "./ManageTAsModal";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { SlideUpdateContext } from "../SlideUpdateContext";
@@ -15,6 +26,8 @@ const TITLE_MAX_CHARS = 6;
 interface ChatHeaderProps {
   role: Role;
   answerMode: "all" | "instructors_only";
+  notificationMode: "off" | "sound" | "browser";
+  onToggleNotificationMode: () => void;
   onToggleAnswerMode: () => void;
   searchQuery: string;
   onSearchChange: (value: string) => void;
@@ -55,6 +68,8 @@ function SlideToggle() {
 export default function ChatHeader({
   role,
   answerMode,
+  notificationMode,
+  onToggleNotificationMode,
   onToggleAnswerMode,
   searchQuery,
   onSearchChange,
@@ -63,6 +78,24 @@ export default function ChatHeader({
   const { isSlidesVisible } = useContext(SlideUpdateContext);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [showTAModal, setShowTAModal] = useState(false);
+  const notificationButton =
+    notificationMode === "off"
+      ? {
+          Icon: VolumeOff,
+          title: "Notifications off",
+          className: "bg-red-100 text-red-700 hover:bg-red-200",
+        }
+      : notificationMode === "sound"
+        ? {
+            Icon: Volume2,
+            title: "Beep notifications on",
+            className: "bg-stone-200 text-stone-600 hover:bg-stone-300",
+          }
+        : {
+            Icon: BellRing,
+            title: "Browser and beep notifications on",
+            className: "bg-amber-100 text-amber-700 hover:bg-amber-200",
+          };
 
   return (
     <>
@@ -127,7 +160,16 @@ export default function ChatHeader({
 
               <div className="flex items-center gap-2 shrink-0 animate-in fade-in duration-200">
                 <button
+                  onClick={onToggleNotificationMode}
+                  title={`${notificationButton.title} - click to cycle`}
+                  className={`w-9 h-9 flex items-center justify-center rounded-md transition-colors ${notificationButton.className}`}
+                  aria-label={notificationButton.title}
+                >
+                  <notificationButton.Icon className="w-4 h-4" />
+                </button>
+                <button
                   onClick={() => setIsSearchExpanded(true)}
+                  title="Search questions and answers"
                   className={`w-9 h-9 flex items-center justify-center rounded-md transition-colors ${
                     searchQuery
                       ? "bg-stone-800 text-stone-50 hover:bg-stone-700"
@@ -147,8 +189,8 @@ export default function ChatHeader({
                     onClick={onToggleAnswerMode}
                     title={
                       answerMode === "all"
-                        ? "Anyone can answer — click to restrict to TAs/Professors"
-                        : "TAs/Professors only — click to allow everyone"
+                        ? "Anyone can answer - click to restrict to TAs/Professors"
+                        : "TAs/Professors only - click to allow everyone"
                     }
                     className={`flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium transition-colors shrink-0 cursor-pointer ${
                       answerMode === "all"
