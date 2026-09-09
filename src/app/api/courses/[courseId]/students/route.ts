@@ -12,11 +12,11 @@ interface RouteParams {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns all enrolled students and TAs for a course.
+ * Returns enrolled students, staff (TAs), and professors for a course.
  *
- * Returns: { students: [{name, utorid}], tas: [{name, utorid}] }
+ * Returns: { students, tas, professors } each [{name, utorid}]
  *
- * Only the professor enrolled in the course may call this.
+ * Only a professor enrolled in the course may call this.
  */
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
@@ -39,20 +39,21 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     const enrollments = await prisma.courseEnrollment.findMany({
-      where: { courseId, role: { in: ["STUDENT", "TA"] } },
+      where: { courseId, role: { in: ["STUDENT", "TA", "PROFESSOR"] } },
       include: { user: { select: { name: true, utorid: true } } },
       orderBy: { user: { name: "asc" } },
     });
 
-    const students = enrollments
-      .filter((e) => e.role === "STUDENT")
-      .map((e) => ({ name: e.user.name, utorid: e.user.utorid }));
+    const mapEntry = (e: (typeof enrollments)[number]) => ({
+      name: e.user.name,
+      utorid: e.user.utorid,
+    });
 
-    const tas = enrollments
-      .filter((e) => e.role === "TA")
-      .map((e) => ({ name: e.user.name, utorid: e.user.utorid }));
-
-    return NextResponse.json({ students, tas });
+    return NextResponse.json({
+      students: enrollments.filter((e) => e.role === "STUDENT").map(mapEntry),
+      tas: enrollments.filter((e) => e.role === "TA").map(mapEntry),
+      professors: enrollments.filter((e) => e.role === "PROFESSOR").map(mapEntry),
+    });
   } catch (error) {
     console.error("[Courses API] Failed to fetch roster:", error);
     return NextResponse.json({ error: "An error occurred." }, { status: 500 });
@@ -119,8 +120,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "utorids must be a non-empty array." }, { status: 400 });
     }
 
-    // Only STUDENT and TA are valid enrollment roles for this endpoint
-    const enrollmentRole: "STUDENT" | "TA" = roleParam === "TA" ? "TA" : "STUDENT";
+    const enrollmentRole: "STUDENT" | "TA" | "PROFESSOR" =
+      roleParam === "TA" ? "TA" : roleParam === "PROFESSOR" ? "PROFESSOR" : "STUDENT";
 
     const added: string[] = [];
     const alreadyEnrolled: string[] = [];
@@ -186,7 +187,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
  *
  * - Students in the new list but not enrolled → added as STUDENT
  * - Students currently enrolled as STUDENT but not in the new list → removed
- * - TAs and the PROFESSOR are never touched.
+ * - TAs and professors are never touched.
  *
  * Returns: { added: string[], removed: string[], unchanged: number }
  *
@@ -310,11 +311,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // ---------------------------------------------------------------------------
 
 /**
- * Removes a student or TA enrollment from a course by UTORid.
+ * Demotes a staff (TA) or co-professor enrollment to STUDENT by UTORid.
+ * Students are demoted the same way (no-op if already STUDENT — still "removed"
+ * from the instructional list by role). Actually students get role STUDENT update.
  *
  * Request body: { utorid: string }
  *
- * Only the professor enrolled in the course may call this.
+ * Guards for PROFESSOR targets:
+ *   - Cannot remove yourself
+ *   - Cannot remove the last professor on the course
+ *
+ * Only a professor enrolled in the course may call this.
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
@@ -348,8 +355,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "utorid is required." }, { status: 400 });
     }
 
+    const normalizedUtorid = utorid.trim().toLowerCase();
     const target = await prisma.user.findUnique({
-      where: { utorid: utorid.trim().toLowerCase() },
+      where: { utorid: normalizedUtorid },
       select: { id: true },
     });
     if (!target) {
@@ -362,18 +370,32 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!targetEnrollment) {
       return NextResponse.json({ error: "User is not enrolled in this course." }, { status: 404 });
     }
+
     if (targetEnrollment.role === "PROFESSOR") {
-      return NextResponse.json({ error: "Cannot remove the course professor." }, { status: 403 });
+      if (target.id === user.userId) {
+        return NextResponse.json(
+          { error: "You cannot remove yourself as a professor." },
+          { status: 403 }
+        );
+      }
+      const professorCount = await prisma.courseEnrollment.count({
+        where: { courseId, role: "PROFESSOR" },
+      });
+      if (professorCount <= 1) {
+        return NextResponse.json(
+          { error: "Cannot remove the last professor from the course." },
+          { status: 403 }
+        );
+      }
     }
 
-    // Demote TA back to STUDENT rather than removing them from the course entirely.
-    // This preserves their enrollment so they stay in any active session.
+    // Demote to STUDENT rather than deleting the row — keeps them in live sessions.
     await prisma.courseEnrollment.update({
       where: { userId_courseId: { userId: target.id, courseId } },
       data: { role: "STUDENT" },
     });
 
-    return NextResponse.json({ removed: utorid.trim().toLowerCase() });
+    return NextResponse.json({ removed: normalizedUtorid });
   } catch (error) {
     console.error("[Courses API] Failed to remove student:", error);
     return NextResponse.json({ error: "An error occurred." }, { status: 500 });
