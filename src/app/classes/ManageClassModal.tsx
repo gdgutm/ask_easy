@@ -32,7 +32,7 @@ interface ManageClassModalProps {
   onDeleted: (courseId: string) => void;
 }
 
-type Tab = "students" | "tas" | "rename" | "delete";
+type Tab = "students" | "staff" | "rename" | "delete";
 
 interface RosterEntry {
   name: string;
@@ -193,12 +193,14 @@ export default function ManageClassModal({
   // ---- Roster state ----
   const [rosterStudents, setRosterStudents] = useState<RosterEntry[]>([]);
   const [rosterTas, setRosterTas] = useState<RosterEntry[]>([]);
+  const [rosterProfessors, setRosterProfessors] = useState<RosterEntry[]>([]);
   const [rosterLoading, setRosterLoading] = useState(true);
   const [rosterError, setRosterError] = useState<string | null>(null);
 
   // ---- Search state ----
   const [studentSearch, setStudentSearch] = useState("");
   const [taSearch, setTaSearch] = useState("");
+  const [professorSearch, setProfessorSearch] = useState("");
 
   // ---- Remove state ----
   const [removingUtorid, setRemovingUtorid] = useState<string | null>(null);
@@ -223,6 +225,16 @@ export default function ManageClassModal({
     invalid: string[];
   } | null>(null);
   const [taAddError, setTaAddError] = useState<string | null>(null);
+
+  // ---- Add professors state ----
+  const [professorUtoridsInput, setProfessorUtoridsInput] = useState("");
+  const [addingProfessors, setAddingProfessors] = useState(false);
+  const [professorAddResult, setProfessorAddResult] = useState<{
+    added: string[];
+    alreadyEnrolled: string[];
+    invalid: string[];
+  } | null>(null);
+  const [professorAddError, setProfessorAddError] = useState<string | null>(null);
 
   // ---- CSV sync state ----
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -271,6 +283,7 @@ export default function ManageClassModal({
       }
       setRosterStudents(data.students ?? []);
       setRosterTas(data.tas ?? []);
+      setRosterProfessors(data.professors ?? []);
     } catch {
       setRosterError("Failed to load roster.");
     } finally {
@@ -315,6 +328,7 @@ export default function ManageClassModal({
       // Optimistically remove from local state
       setRosterStudents((prev) => prev.filter((e) => e.utorid !== utorid));
       setRosterTas((prev) => prev.filter((e) => e.utorid !== utorid));
+      setRosterProfessors((prev) => prev.filter((e) => e.utorid !== utorid));
     } catch {
       setRemoveError("Failed to remove. Please try again.");
     } finally {
@@ -383,6 +397,38 @@ export default function ManageClassModal({
       setTaAddError("Failed to add TAs. Please try again.");
     } finally {
       setAddingTas(false);
+    }
+  }
+
+  async function handleAddProfessors() {
+    const utorids = professorUtoridsInput
+      .split(/[\n,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (utorids.length === 0) return;
+
+    setAddingProfessors(true);
+    setProfessorAddError(null);
+    setProfessorAddResult(null);
+
+    try {
+      const res = await fetch(`/api/courses/${course.id}/students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ utorids, role: "PROFESSOR" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setProfessorAddError(data.error ?? "Failed to add professors.");
+        return;
+      }
+      setProfessorAddResult(data);
+      setProfessorUtoridsInput("");
+      await fetchRoster();
+    } catch {
+      setProfessorAddError("Failed to add professors. Please try again.");
+    } finally {
+      setAddingProfessors(false);
     }
   }
 
@@ -522,7 +568,7 @@ export default function ManageClassModal({
           {(
             [
               { id: "students", label: "Students", icon: UserPlus },
-              { id: "tas", label: "TAs", icon: GraduationCap },
+              { id: "staff", label: "Staff", icon: GraduationCap },
               { id: "rename", label: "Rename", icon: Pencil },
               { id: "delete", label: "Delete", icon: Trash2 },
             ] as { id: Tab; label: string; icon: React.ElementType }[]
