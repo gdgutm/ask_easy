@@ -16,6 +16,9 @@ export default function LandingPage() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [hasProfessorCourses, setHasProfessorCourses] = useState(false);
+  const [hasStudentCourses, setHasStudentCourses] = useState(false);
+  const [coursesReady, setCoursesReady] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -39,6 +42,18 @@ export default function LandingPage() {
         }
       })
       .catch(() => null);
+
+    // Home UI is driven by CourseEnrollment, not only global User.role — co-professors
+    // are usually global STUDENTs who still need the professor lecture panel.
+    fetch("/api/courses")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const courses = (data?.courses ?? []) as { role: string }[];
+        setHasProfessorCourses(courses.some((c) => c.role === "PROFESSOR"));
+        setHasStudentCourses(courses.some((c) => c.role === "STUDENT" || c.role === "TA"));
+      })
+      .catch(() => null)
+      .finally(() => setCoursesReady(true));
   }, []);
 
   const handleOnboardingComplete = () => {
@@ -48,7 +63,7 @@ export default function LandingPage() {
     setShowOnboarding(false);
   };
 
-  if (!user) {
+  if (!user || !coursesReady) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <span className="text-stone-400 text-sm">Loading…</span>
@@ -56,14 +71,13 @@ export default function LandingPage() {
     );
   }
 
+  const isGlobalProfessor = user.role === "PROFESSOR";
+  const showProfViewer = isGlobalProfessor || hasProfessorCourses;
+  const showStudentViewer = !isGlobalProfessor || hasStudentCourses;
+
   const getStepsForRole = () => {
-    switch (user.role) {
-      case "PROFESSOR":
-        return PROF_ONBOARDING_STEPS;
-      case "STUDENT":
-      default:
-        return STUDENT_ONBOARDING_STEPS;
-    }
+    if (showProfViewer) return PROF_ONBOARDING_STEPS;
+    return STUDENT_ONBOARDING_STEPS;
   };
 
   return (
@@ -94,8 +108,9 @@ export default function LandingPage() {
 
       <div className="overflow-y-auto flex-1 flex flex-col">
         <div className="flex-1 p-5 pt-16 pb-10 flex flex-col items-center">
-          <div className="w-full max-w-7xl mx-auto flex-1 flex flex-col">
-            {user.role === "PROFESSOR" ? <ProfCourseViewer /> : <CourseViewer />}
+          <div className="w-full max-w-7xl mx-auto flex-1 flex flex-col gap-10">
+            {showProfViewer && <ProfCourseViewer canCreateClass={isGlobalProfessor} />}
+            {showStudentViewer && <CourseViewer />}
           </div>
         </div>
         {footer()}
@@ -105,7 +120,7 @@ export default function LandingPage() {
         <OnboardingCarousel
           steps={getStepsForRole()}
           onComplete={handleOnboardingComplete}
-          requireAgreement={user.role !== "PROFESSOR"}
+          requireAgreement={!showProfViewer}
         />
       )}
     </div>
