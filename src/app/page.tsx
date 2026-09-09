@@ -9,7 +9,7 @@ import OnboardingCarousel from "./components/OnboardingCarousel";
 import { STUDENT_ONBOARDING_STEPS, PROF_ONBOARDING_STEPS } from "@/constants/onboarding";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInitials, isLikelyAvatarImageUrl } from "@/utils/types";
-import { CircleHelp, LayoutDashboard } from "lucide-react";
+import { CircleHelp, LayoutDashboard, PlusCircle } from "lucide-react";
 import Link from "next/link";
 
 export default function LandingPage() {
@@ -73,7 +73,15 @@ export default function LandingPage() {
 
   const isGlobalProfessor = user.role === "PROFESSOR";
   const showProfViewer = isGlobalProfessor || hasProfessorCourses;
-  const showStudentViewer = !isGlobalProfessor || hasStudentCourses;
+  // Don't mount the student viewer empty-state under a co-prof who only has professor courses.
+  const showStudentViewer = hasStudentCourses || !showProfViewer;
+  const showLecturesHeader = hasProfessorCourses || hasStudentCourses;
+
+  const lecturesSubtitle = showProfViewer
+    ? showStudentViewer
+      ? "Manage your lectures, start live sessions, or join when a class goes live."
+      : "Manage your lectures and start live sessions."
+    : "Select a live lecture to join its session. If the lecture is not live, just wait!";
 
   const getStepsForRole = () => {
     if (showProfViewer) return PROF_ONBOARDING_STEPS;
@@ -108,9 +116,43 @@ export default function LandingPage() {
 
       <div className="overflow-y-auto flex-1 flex flex-col">
         <div className="flex-1 p-5 pt-16 pb-10 flex flex-col items-center">
-          <div className="w-full max-w-7xl mx-auto flex-1 flex flex-col gap-10">
-            {showProfViewer && <ProfCourseViewer canCreateClass={isGlobalProfessor} />}
-            {showStudentViewer && <CourseViewer />}
+          <div className="w-full max-w-7xl mx-auto flex-1 flex flex-col">
+            {showLecturesHeader && (
+              <div className="max-w-6xl mx-auto w-full mb-10 flex items-center justify-between">
+                <div>
+                  <h2 className="text-4xl font-bold text-stone-900 tracking-tight mb-2">
+                    My Lectures
+                  </h2>
+                  <p className="text-lg text-stone-500">{lecturesSubtitle}</p>
+                </div>
+                {isGlobalProfessor && (
+                  <Link
+                    href="/create-class"
+                    className="hidden sm:flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                  >
+                    <PlusCircle className="w-5 h-5" />
+                    Create Lecture
+                  </Link>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-10">
+              {showProfViewer && <ProfCourseViewer canCreateClass={isGlobalProfessor} />}
+              {showStudentViewer && <CourseViewer />}
+            </div>
+
+            {isGlobalProfessor && showLecturesHeader && (
+              <div className="max-w-6xl mx-auto w-full mt-8 sm:hidden">
+                <Link
+                  href="/create-class"
+                  className="flex items-center justify-center gap-2 w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-all shadow-sm"
+                >
+                  <PlusCircle className="w-5 h-5" />
+                  Create New Lecture
+                </Link>
+              </div>
+            )}
           </div>
         </div>
         {footer()}

@@ -160,26 +160,7 @@ export default function ProfCourseButtons({ canCreateClass = true }: ProfCourseB
   if (courses.length > 0) {
     return (
       <>
-        <div className="flex-1 w-full py-8 text-left">
-          <div className="max-w-6xl mx-auto w-full mb-10 flex items-center justify-between">
-            <div>
-              <h2 className="text-4xl font-bold text-stone-900 tracking-tight mb-2">My Lectures</h2>
-              <p className="text-lg text-stone-500">
-                Manage your lectures and start live sessions.
-              </p>
-            </div>
-
-            {canCreateClass && (
-              <Link
-                href="/create-class"
-                className="hidden sm:flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
-              >
-                <PlusCircle className="w-5 h-5" />
-                Create Lecture
-              </Link>
-            )}
-          </div>
-
+        <div className="flex-1 w-full text-left">
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto relative">
             {error && (
               <div className="col-span-full md:col-span-2 lg:col-span-3 mb-2 bg-red-50 text-red-600 p-4 rounded-md border border-red-100 flex items-center gap-3 font-medium">
@@ -303,18 +284,6 @@ export default function ProfCourseButtons({ canCreateClass = true }: ProfCourseB
               );
             })}
           </div>
-
-          {canCreateClass && (
-            <div className="max-w-6xl mx-auto w-full mt-8 sm:hidden">
-              <Link
-                href="/create-class"
-                className="flex items-center justify-center gap-2 w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-all shadow-sm"
-              >
-                <PlusCircle className="w-5 h-5" />
-                Create New Lecture
-              </Link>
-            </div>
-          )}
         </div>
 
         {managingCourse && (

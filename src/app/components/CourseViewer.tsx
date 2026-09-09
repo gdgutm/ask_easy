@@ -76,21 +76,13 @@ export default function CourseViewer() {
 
   if (courses.length > 0) {
     return (
-      <div className="flex-1 w-full py-8 text-left">
-        <div className="max-w-6xl mx-auto w-full mb-10 flex flex-col gap-4">
-          <div>
-            <h2 className="text-4xl font-bold text-stone-900 tracking-tight mb-2">My Lectures</h2>
-            <p className="text-lg text-stone-500">
-              Select a live lecture to join its session. If the lecture is not live, just wait!
-            </p>
+      <div className="flex-1 w-full text-left">
+        {joinError && (
+          <div className="max-w-6xl mx-auto mb-6 bg-red-50 text-red-600 p-4 rounded-md border border-red-100 flex items-center gap-3 font-medium">
+            <div className="w-2 h-2 rounded-full bg-red-500" />
+            {joinError}
           </div>
-          {joinError && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-md border border-red-100 flex items-center gap-3 font-medium">
-              <div className="w-2 h-2 rounded-full bg-red-500" />
-              {joinError}
-            </div>
-          )}
-        </div>
+        )}
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
           {courses.map((course) => {
