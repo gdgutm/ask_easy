@@ -610,7 +610,8 @@ export default function ManageClassModal({
                 <p className="text-sm font-medium text-stone-700">Sync Roster from CSV</p>
                 <p className="text-xs text-stone-500">
                   Upload your updated class list CSV. Students added to the file will be enrolled;
-                  students removed from the file will be unenrolled. TAs are not affected.
+                  students removed from the file will be unenrolled. TAs and professors are not
+                  affected.
                 </p>
 
                 {/* File picker */}
@@ -734,61 +735,127 @@ export default function ManageClassModal({
             </div>
           )}
 
-          {/* ---- TAs ---- */}
-          {activeTab === "tas" && (
-            <div className="flex flex-col gap-4">
-              <RosterTable
-                entries={rosterTas}
-                search={taSearch}
-                onSearchChange={setTaSearch}
-                emptyMessage="No TAs enrolled yet."
-                loading={rosterLoading}
-                error={rosterError}
-                removingUtorid={removingUtorid}
-                removeError={removeError}
-                onRemove={handleRemove}
-              />
-              <div className="border-t border-stone-100 pt-4 flex flex-col gap-3">
-                <p className="text-sm font-medium text-stone-700">Add TAs</p>
-                <p className="text-xs text-stone-500">
-                  Enter one or more UTORids — separated by commas, spaces, or new lines. TAs can see
-                  all questions and answer in restricted mode.
-                </p>
-                <textarea
-                  value={taUtoridsInput}
-                  spellCheck={false}
-                  onChange={(e) => {
-                    setTaUtoridsInput(e.target.value);
-                    setTaAddResult(null);
-                    setTaAddError(null);
-                  }}
-                  placeholder={"tasmith2, janedooe, scalijad"}
-                  rows={3}
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
+          {/* ---- Staff (professors + TAs) ---- */}
+          {activeTab === "staff" && (
+            <div className="flex flex-col gap-8">
+              {/* Professors */}
+              <div className="flex flex-col gap-4">
+                <p className="text-sm font-semibold text-stone-800">Professors</p>
+                <RosterTable
+                  entries={rosterProfessors}
+                  search={professorSearch}
+                  onSearchChange={setProfessorSearch}
+                  emptyMessage="No professors enrolled yet."
+                  loading={rosterLoading}
+                  error={rosterError}
+                  removingUtorid={removingUtorid}
+                  removeError={removeError}
+                  onRemove={handleRemove}
                 />
-                {taAddError && <p className="text-sm text-red-600">{taAddError}</p>}
-                {taAddResult && (
-                  <div className="text-sm space-y-1">
-                    {taAddResult.added.length > 0 && (
-                      <p className="text-green-700">Added: {taAddResult.added.join(", ")}</p>
-                    )}
-                    {taAddResult.alreadyEnrolled.length > 0 && (
-                      <p className="text-stone-500">
-                        Already enrolled: {taAddResult.alreadyEnrolled.join(", ")}
-                      </p>
-                    )}
-                    {taAddResult.invalid.length > 0 && (
-                      <p className="text-red-600">Invalid: {taAddResult.invalid.join(", ")}</p>
-                    )}
-                  </div>
-                )}
-                <button
-                  onClick={handleAddTas}
-                  disabled={addingTas || taUtoridsInput.trim().length === 0}
-                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  {addingTas ? "Adding…" : "Add TAs"}
-                </button>
+                <div className="border-t border-stone-100 pt-4 flex flex-col gap-3">
+                  <p className="text-sm font-medium text-stone-700">Add Professors</p>
+                  <p className="text-xs text-stone-500">
+                    Enter one or more UTORids — separated by commas, spaces, or new lines.
+                    Professors can start sessions, control slides, and manage this course.
+                  </p>
+                  <textarea
+                    value={professorUtoridsInput}
+                    spellCheck={false}
+                    onChange={(e) => {
+                      setProfessorUtoridsInput(e.target.value);
+                      setProfessorAddResult(null);
+                      setProfessorAddError(null);
+                    }}
+                    placeholder={"smithj, doejohn"}
+                    rows={3}
+                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
+                  />
+                  {professorAddError && <p className="text-sm text-red-600">{professorAddError}</p>}
+                  {professorAddResult && (
+                    <div className="text-sm space-y-1">
+                      {professorAddResult.added.length > 0 && (
+                        <p className="text-green-700">
+                          Added: {professorAddResult.added.join(", ")}
+                        </p>
+                      )}
+                      {professorAddResult.alreadyEnrolled.length > 0 && (
+                        <p className="text-stone-500">
+                          Already enrolled: {professorAddResult.alreadyEnrolled.join(", ")}
+                        </p>
+                      )}
+                      {professorAddResult.invalid.length > 0 && (
+                        <p className="text-red-600">
+                          Invalid: {professorAddResult.invalid.join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleAddProfessors}
+                    disabled={addingProfessors || professorUtoridsInput.trim().length === 0}
+                    className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {addingProfessors ? "Adding…" : "Add Professors"}
+                  </button>
+                </div>
+              </div>
+
+              {/* TAs */}
+              <div className="flex flex-col gap-4 border-t border-stone-200 pt-6">
+                <p className="text-sm font-semibold text-stone-800">TAs</p>
+                <RosterTable
+                  entries={rosterTas}
+                  search={taSearch}
+                  onSearchChange={setTaSearch}
+                  emptyMessage="No TAs enrolled yet."
+                  loading={rosterLoading}
+                  error={rosterError}
+                  removingUtorid={removingUtorid}
+                  removeError={removeError}
+                  onRemove={handleRemove}
+                />
+                <div className="border-t border-stone-100 pt-4 flex flex-col gap-3">
+                  <p className="text-sm font-medium text-stone-700">Add TAs</p>
+                  <p className="text-xs text-stone-500">
+                    Enter one or more UTORids — separated by commas, spaces, or new lines. TAs can
+                    see all questions and answer in restricted mode.
+                  </p>
+                  <textarea
+                    value={taUtoridsInput}
+                    spellCheck={false}
+                    onChange={(e) => {
+                      setTaUtoridsInput(e.target.value);
+                      setTaAddResult(null);
+                      setTaAddError(null);
+                    }}
+                    placeholder={"tasmith2, janedooe, scalijad"}
+                    rows={3}
+                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
+                  />
+                  {taAddError && <p className="text-sm text-red-600">{taAddError}</p>}
+                  {taAddResult && (
+                    <div className="text-sm space-y-1">
+                      {taAddResult.added.length > 0 && (
+                        <p className="text-green-700">Added: {taAddResult.added.join(", ")}</p>
+                      )}
+                      {taAddResult.alreadyEnrolled.length > 0 && (
+                        <p className="text-stone-500">
+                          Already enrolled: {taAddResult.alreadyEnrolled.join(", ")}
+                        </p>
+                      )}
+                      {taAddResult.invalid.length > 0 && (
+                        <p className="text-red-600">Invalid: {taAddResult.invalid.join(", ")}</p>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleAddTas}
+                    disabled={addingTas || taUtoridsInput.trim().length === 0}
+                    className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {addingTas ? "Adding…" : "Add TAs"}
+                  </button>
+                </div>
               </div>
             </div>
           )}
