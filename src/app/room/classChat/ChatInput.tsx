@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Ghost, User, Send, Presentation } from "lucide-react";
 import { useSlideContext } from "../RoomContext";
@@ -33,11 +34,8 @@ export default function ChatInput({
   const slideContextAvailable =
     slideContext.slidePageIndex !== null && slideContext.slideSetId !== null;
 
-  // Out-of-bounds length just greys out Post, the same as an empty box. The
-  // server enforces the same bounds — see validateQuestionContent.
   const trimmed = content.trim();
-  const canPost =
-    !disabled && trimmed.length >= QUESTION_MIN_LENGTH && trimmed.length <= QUESTION_MAX_LENGTH;
+  const canClick = !disabled && trimmed.length > 0;
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value);
@@ -45,7 +43,15 @@ export default function ChatInput({
   };
 
   const handleSubmit = () => {
-    if (!canPost) return;
+    if (!canClick) return;
+    if (trimmed.length < QUESTION_MIN_LENGTH) {
+      toast.error(`Question must be at least ${QUESTION_MIN_LENGTH} characters.`);
+      return;
+    }
+    if (trimmed.length > QUESTION_MAX_LENGTH) {
+      toast.error(`Question must be at most ${QUESTION_MAX_LENGTH} characters.`);
+      return;
+    }
     onSubmit(trimmed, isAnonymous, includeSlideContext && slideContextAvailable);
     setContent("");
   };
@@ -120,7 +126,7 @@ export default function ChatInput({
               </div>
               <button
                 onClick={handleSubmit}
-                disabled={!canPost}
+                disabled={!canClick}
                 className="flex items-center justify-center gap-1.5 h-9 px-4 bg-stone-900 hover:bg-stone-800 text-stone-50 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Post

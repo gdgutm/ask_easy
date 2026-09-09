@@ -7,6 +7,7 @@ import { Download, Square, X } from "lucide-react";
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { toast } from "sonner";
 import ClassChat from "./classChat";
 import SlideViewer from "./slideViewer";
 import type { ClientToServerEvents, ServerToClientEvents } from "@/socket/types";
@@ -306,7 +307,12 @@ function RoomInner() {
     s.on("connect", () => {
       if (sessionIdRef.current) {
         s.emit("session:join", { sessionId: sessionIdRef.current }, (error?: string) => {
-          if (!error) setSocket(s);
+          if (!error) {
+            setSocket(s);
+          } else {
+            setSocket(null);
+            toast.error(error);
+          }
         });
       } else {
         setSocket(s);

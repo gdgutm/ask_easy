@@ -129,9 +129,17 @@ export async function initSocketIO(
   // -----------------------------------------------------------------------
 
   async function broadcastViewerCount(sessionId: string) {
-    const sockets = await io!.in(`session:${sessionId}`).fetchSockets();
-    const count = sockets.filter((s) => s.data.role !== "PROFESSOR").length;
-    io!.to(`session:${sessionId}`).emit("viewer:count", { count });
+    try {
+      const sockets = await io!.in(`session:${sessionId}`).fetchSockets();
+      // courseRole (enrollment) wins over cookie role
+      const count = sockets.filter(
+        (s) => (s.data.courseRole ?? s.data.role) !== "PROFESSOR"
+      ).length;
+      io!.to(`session:${sessionId}`).emit("viewer:count", { count });
+    } catch (err) {
+      // Never let Redis/adapter failures block session:join ack (chat + UI gate on it).
+      console.error(`[Socket.IO] broadcastViewerCount failed for ${sessionId}:`, err);
+    }
   }
 
   io.on("connection", (socket) => {
@@ -139,7 +147,16 @@ export async function initSocketIO(
 
     // Session room management
     socket.on("session:join", async (payload, ack) => {
-      if (payload?.sessionId && typeof payload.sessionId === "string") {
+      const reply = (error?: string) => {
+        if (typeof ack === "function") ack(error);
+      };
+
+      if (!payload?.sessionId || typeof payload.sessionId !== "string") {
+        reply("Invalid session.");
+        return;
+      }
+
+      try {
         const userId = socket.data.userId;
 
         // Verify the session exists and the user is enrolled in the course.
@@ -150,7 +167,7 @@ export async function initSocketIO(
 
         if (!sessionRecord) {
           socket.emit("question:error", { message: "Session not found." });
-          if (typeof ack === "function") ack("Session not found.");
+          reply("Session not found.");
           return;
         }
 
@@ -175,17 +192,20 @@ export async function initSocketIO(
             reason: "not enrolled",
           });
           socket.emit("question:error", { message: "You are not enrolled in this session." });
-          if (typeof ack === "function") ack("Not enrolled.");
+          reply("Not enrolled.");
           return;
         }
 
         if (socket.data.currentSessionId && socket.data.currentSessionId !== payload.sessionId) {
-          socket.leave(`session:${socket.data.currentSessionId}`);
-          await broadcastViewerCount(socket.data.currentSessionId);
+          const prev = socket.data.currentSessionId;
+          socket.leave(`session:${prev}`);
+          socket.data.courseRole = undefined;
+          void broadcastViewerCount(prev);
         }
 
         socket.join(`session:${payload.sessionId}`);
         socket.data.currentSessionId = payload.sessionId;
+        socket.data.courseRole = enrollment.role;
         console.log(`[Socket.IO] ${socket.id} joined session:${payload.sessionId}`);
 
         // Join the instructor room if the user is a TA or PROFESSOR in this course,
@@ -194,32 +214,43 @@ export async function initSocketIO(
           socket.join(`session:${payload.sessionId}:instructors`);
         }
 
-        await broadcastViewerCount(payload.sessionId);
-        if (typeof ack === "function") ack();
+        // Ack before count broadcast so Redis/adapter stalls never leave the client
+        // with socket===null (Post disabled + people counter stuck at 0).
+        reply();
+        void broadcastViewerCount(payload.sessionId);
+      } catch (err) {
+        console.error("[Socket.IO] session:join failed:", err);
+        reply("Join failed.");
       }
     });
 
     socket.on("viewer:sync", async (payload) => {
       if (payload?.sessionId && typeof payload.sessionId === "string") {
-        const userId = socket.data.userId;
-        if (!userId) return;
+        try {
+          const userId = socket.data.userId;
+          if (!userId) return;
 
-        // Enrollment check — must be enrolled in the session's course
-        const syncSession = await prisma.session.findUnique({
-          where: { id: payload.sessionId },
-          select: { courseId: true },
-        });
-        if (!syncSession) return;
+          // Enrollment check — must be enrolled in the session's course
+          const syncSession = await prisma.session.findUnique({
+            where: { id: payload.sessionId },
+            select: { courseId: true },
+          });
+          if (!syncSession) return;
 
-        const syncEnrollment = await prisma.courseEnrollment.findUnique({
-          where: { userId_courseId: { userId, courseId: syncSession.courseId } },
-          select: { role: true },
-        });
-        if (!syncEnrollment) return;
+          const syncEnrollment = await prisma.courseEnrollment.findUnique({
+            where: { userId_courseId: { userId, courseId: syncSession.courseId } },
+            select: { role: true },
+          });
+          if (!syncEnrollment) return;
 
-        const sockets = await io!.in(`session:${payload.sessionId}`).fetchSockets();
-        const count = sockets.filter((s) => s.data.role !== "PROFESSOR").length;
-        socket.emit("viewer:count", { count });
+          const sockets = await io!.in(`session:${payload.sessionId}`).fetchSockets();
+          const count = sockets.filter(
+            (s) => (s.data.courseRole ?? s.data.role) !== "PROFESSOR"
+          ).length;
+          socket.emit("viewer:count", { count });
+        } catch (err) {
+          console.error("[Socket.IO] viewer:sync failed:", err);
+        }
       }
     });
 
@@ -228,10 +259,11 @@ export async function initSocketIO(
         socket.leave(`session:${payload.sessionId}`);
         if (socket.data.currentSessionId === payload.sessionId) {
           socket.data.currentSessionId = undefined;
+          socket.data.courseRole = undefined;
         }
         console.log(`[Socket.IO] ${socket.id} left session:${payload.sessionId}`);
 
-        await broadcastViewerCount(payload.sessionId);
+        void broadcastViewerCount(payload.sessionId);
       }
     });
 
@@ -250,11 +282,11 @@ export async function initSocketIO(
     handleAnswerModeChange(socket, io!);
     handleAnswerModeSync(socket);
 
-    socket.on("disconnect", async (reason) => {
+    socket.on("disconnect", (reason) => {
       console.log(`[Socket.IO] Client disconnected: ${socket.id} (reason: ${reason})`);
       const sessionId = socket.data.currentSessionId;
       if (sessionId) {
-        await broadcastViewerCount(sessionId);
+        void broadcastViewerCount(sessionId);
       }
     });
   });
