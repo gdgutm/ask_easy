@@ -72,14 +72,10 @@ export async function GET() {
  *
  * Request body:
  *   {
- *     code:     string                              // e.g. "CSC398H5"
- *     students: Array<{                             // from parseAndProcessCSV
- *       utorid:    string,
- *       givenName: string,
- *       surname:   string,
- *       Email?:    string,
- *       [key]:     string                           // other CSV columns
- *     }>
+ *     code:     string
+ *     students: Array<{ utorid, givenName, surname, ... }>
+ *     tas?:     string[]         // optional TA UTORids
+ *     professors?: string[]      // optional co-professor UTORids
  *   }
  *
  * Only PROFESSOR-role users may call this endpoint.
@@ -108,7 +104,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Request body is required." }, { status: 400 });
     }
 
-    const { code, section, students, tas } = body as Record<string, unknown>;
+    const { code, section, students, tas, professors } = body as Record<string, unknown>;
 
     if (!code || typeof code !== "string" || code.trim().length === 0) {
       return NextResponse.json({ error: "Course code is required." }, { status: 400 });
@@ -118,11 +114,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Students list is required." }, { status: 400 });
     }
 
-    const tasArray: string[] = Array.isArray(tas)
-      ? (tas as unknown[])
-          .map((t) => (typeof t === "string" ? t.trim().toLowerCase() : ""))
-          .filter(Boolean)
-      : [];
+    const parseUtorids = (raw: unknown): string[] =>
+      Array.isArray(raw)
+        ? (raw as unknown[])
+            .map((t) => (typeof t === "string" ? t.trim().toLowerCase() : ""))
+            .filter(Boolean)
+        : [];
+
+    const tasArray = parseUtorids(tas);
+    const professorsArray = parseUtorids(professors).filter(
+      (utorid) => utorid !== user.utorid.toLowerCase()
+    );
 
     const semester = getCurrentSemester();
     const courseCode = code.trim();
@@ -188,6 +190,32 @@ export async function POST(request: NextRequest) {
             userId: studentUser.id,
             courseId: newCourse.id,
             role: "STUDENT",
+          },
+        });
+      }
+
+      // Enroll co-professors (CourseEnrollment.role = "PROFESSOR"; User.role is NOT changed)
+      for (const utorid of professorsArray) {
+        const profUser = await tx.user.upsert({
+          where: { utorid },
+          update: {},
+          create: {
+            utorid,
+            name: utorid,
+            email: `${utorid}@mail.utoronto.ca`,
+            role: "STUDENT",
+          },
+        });
+
+        await tx.courseEnrollment.upsert({
+          where: {
+            userId_courseId: { userId: profUser.id, courseId: newCourse.id },
+          },
+          update: { role: "PROFESSOR" },
+          create: {
+            userId: profUser.id,
+            courseId: newCourse.id,
+            role: "PROFESSOR",
           },
         });
       }
