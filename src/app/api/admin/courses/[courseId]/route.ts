@@ -16,6 +16,13 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
     const { courseId } = await params;
 
+    // Deleting the last room on a classlist would leave the classlist behind
+    // with nothing in it — invisible on the home page and unmanageable.
+    const room = await prisma.course.findUnique({
+      where: { id: courseId },
+      select: { classlistId: true },
+    });
+
     // Gather all session IDs for this course
     const sessions = await prisma.session.findMany({
       where: { courseId },
@@ -61,6 +68,13 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
       await tx.courseEnrollment.deleteMany({ where: { courseId } });
       await tx.course.delete({ where: { id: courseId } });
+
+      if (room?.classlistId) {
+        const remaining = await tx.course.count({ where: { classlistId: room.classlistId } });
+        if (remaining === 0) {
+          await tx.classlist.delete({ where: { id: room.classlistId } });
+        }
+      }
     });
 
     return NextResponse.json({ success: true });

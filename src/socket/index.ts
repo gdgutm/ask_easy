@@ -188,8 +188,13 @@ export async function initSocketIO(
         }
 
         if (socket.data.currentSessionId && socket.data.currentSessionId !== payload.sessionId) {
-          socket.leave(`session:${socket.data.currentSessionId}`);
-          await broadcastViewerCount(socket.data.currentSessionId);
+          const previous = socket.data.currentSessionId;
+          socket.leave(`session:${previous}`);
+          // The instructor room has to go too: a professor switching to a room
+          // where they are a student would otherwise keep receiving the old
+          // room's INSTRUCTOR_ONLY questions.
+          socket.leave(`session:${previous}:instructors`);
+          await broadcastViewerCount(previous);
         }
 
         socket.join(`session:${payload.sessionId}`);
@@ -233,6 +238,7 @@ export async function initSocketIO(
     socket.on("session:leave", async (payload) => {
       if (payload?.sessionId && typeof payload.sessionId === "string") {
         socket.leave(`session:${payload.sessionId}`);
+        socket.leave(`session:${payload.sessionId}:instructors`);
         if (socket.data.currentSessionId === payload.sessionId) {
           socket.data.currentSessionId = undefined;
           socket.data.currentSessionRole = undefined;

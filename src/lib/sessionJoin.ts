@@ -144,6 +144,33 @@ export async function joinSession(code: string, userId: string): Promise<Session
     };
   }
 
+  // A professor runs one room and cannot see the others on the same class.
+  // A join code would otherwise walk straight around that, enrolling them in a
+  // colleague's room as a student.
+  const room = await prisma.course.findUnique({
+    where: { id: session.courseId },
+    select: { classlistId: true },
+  });
+
+  if (room?.classlistId) {
+    const ownsAnotherRoom = await prisma.course.findFirst({
+      where: {
+        classlistId: room.classlistId,
+        professorId: userId,
+        id: { not: session.courseId },
+      },
+      select: { id: true },
+    });
+
+    if (ownsAnotherRoom) {
+      return {
+        success: false,
+        error: "You run your own room on this class, so you cannot join another one.",
+        statusCode: 403,
+      };
+    }
+  }
+
   // Create enrollment as STUDENT
   const enrollment = await prisma.courseEnrollment.create({
     data: {

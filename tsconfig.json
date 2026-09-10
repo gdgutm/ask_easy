@@ -38,7 +38,9 @@
     ".next-probe-p/types/**/*.ts",
     ".next-probe-p/dev/types/**/*.ts",
     ".next-probe-a/types/**/*.ts",
-    ".next-probe-a/dev/types/**/*.ts"
+    ".next-probe-a/dev/types/**/*.ts",
+    ".next-probe-s/types/**/*.ts",
+    ".next-probe-s/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", ".next", ".next-prof", ".next-ta", ".next-student"]
 }
