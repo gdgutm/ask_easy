@@ -9,7 +9,6 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ask_easy}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379
       - SESSION_SECRET=${SESSION_SECRET:?required in prod.env}
-      - PROFESSOR_WHITELIST=${PROFESSOR_WHITELIST}
       - ADMIN_WHITELIST=${ADMIN_WHITELIST}
       # DEV_* live in docker-compose.override.yml so production never sees them.
     depends_on:

@@ -1,8 +1,17 @@
 export interface SocketData {
   userId: string;
+  /**
+   * Global User.role from the session cookie. Always STUDENT — roles are per
+   * class now — so never authorize on it. Kept only for logging.
+   */
   role: string;
   connectedAt: Date;
   currentSessionId?: string;
+  /**
+   * CourseEnrollment role for `currentSessionId`, resolved on session:join.
+   * This is the only role that carries any authority.
+   */
+  currentSessionRole?: "STUDENT" | "TA" | "PROFESSOR";
 }
 
 export interface SocketErrorPayload {

@@ -31,16 +31,15 @@ export async function GET(_req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Session not found." }, { status: 404 });
     }
 
-    // Enrollment check — non-professors may only query sessions for courses they belong to.
-    // Return 404 (not 403) to avoid leaking the existence of sessions.
-    if (user.role !== "PROFESSOR") {
-      const enrollment = await prisma.courseEnrollment.findUnique({
-        where: { userId_courseId: { userId: user.userId, courseId: session.courseId } },
-        select: { role: true },
-      });
-      if (!enrollment) {
-        return NextResponse.json({ error: "Session not found." }, { status: 404 });
-      }
+    // Enrollment check — a user may only query sessions for courses they belong to.
+    // There is no global professor role to fall back on, so this applies to
+    // everyone. Return 404 (not 403) to avoid leaking the existence of sessions.
+    const enrollment = await prisma.courseEnrollment.findUnique({
+      where: { userId_courseId: { userId: user.userId, courseId: session.courseId } },
+      select: { role: true },
+    });
+    if (!enrollment) {
+      return NextResponse.json({ error: "Session not found." }, { status: 404 });
     }
 
     // Auto-end the session if it has been inactive for too long, then re-read

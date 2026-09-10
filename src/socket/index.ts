@@ -128,10 +128,18 @@ export async function initSocketIO(
   // Connection handler
   // -----------------------------------------------------------------------
 
-  async function broadcastViewerCount(sessionId: string) {
+  /**
+   * The professor running the room is not one of its viewers. Roles are per
+   * course, so this reads the enrollment role recorded at session:join —
+   * the global cookie role is always STUDENT and would count everyone.
+   */
+  async function countViewers(sessionId: string): Promise<number> {
     const sockets = await io!.in(`session:${sessionId}`).fetchSockets();
-    const count = sockets.filter((s) => s.data.role !== "PROFESSOR").length;
-    io!.to(`session:${sessionId}`).emit("viewer:count", { count });
+    return sockets.filter((s) => s.data.currentSessionRole !== "PROFESSOR").length;
+  }
+
+  async function broadcastViewerCount(sessionId: string) {
+    io!.to(`session:${sessionId}`).emit("viewer:count", { count: await countViewers(sessionId) });
   }
 
   io.on("connection", (socket) => {
@@ -186,6 +194,7 @@ export async function initSocketIO(
 
         socket.join(`session:${payload.sessionId}`);
         socket.data.currentSessionId = payload.sessionId;
+        socket.data.currentSessionRole = enrollment.role as SocketData["currentSessionRole"];
         console.log(`[Socket.IO] ${socket.id} joined session:${payload.sessionId}`);
 
         // Join the instructor room if the user is a TA or PROFESSOR in this course,
@@ -217,9 +226,7 @@ export async function initSocketIO(
         });
         if (!syncEnrollment) return;
 
-        const sockets = await io!.in(`session:${payload.sessionId}`).fetchSockets();
-        const count = sockets.filter((s) => s.data.role !== "PROFESSOR").length;
-        socket.emit("viewer:count", { count });
+        socket.emit("viewer:count", { count: await countViewers(payload.sessionId) });
       }
     });
 
@@ -228,6 +235,7 @@ export async function initSocketIO(
         socket.leave(`session:${payload.sessionId}`);
         if (socket.data.currentSessionId === payload.sessionId) {
           socket.data.currentSessionId = undefined;
+          socket.data.currentSessionRole = undefined;
         }
         console.log(`[Socket.IO] ${socket.id} left session:${payload.sessionId}`);
 

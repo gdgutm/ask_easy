@@ -15,11 +15,9 @@ A comprehensive list of every feature in the AskEasy platform.
 
 ### Role System
 
-- **Two-tier roles**:
-  - **Global role** — determined from `whitelist.txt` on every login (PROFESSOR or STUDENT)
-  - **Per-course role** — stored in `CourseEnrollment` (PROFESSOR, TA, or STUDENT)
-- **Whitelist** — plain text file of UTORids; case-insensitive; supports legacy `utorid,PROFESSOR` format
-- **Effective permissions** — course/session actions use the per-course enrollment role, not the global role
+- **Roles are per class** — stored in `CourseEnrollment` (PROFESSOR, TA, or STUDENT). Every login writes `User.role = STUDENT`; there is no global professor role to authorize on.
+- **Admins** — `ADMIN_WHITELIST` (case-insensitive UTORids) is the only global permission. Admins create classlists and assign each one's professors and TAs.
+- **Effective permissions** — every course/session action resolves the caller's `CourseEnrollment` role for that specific course
 
 ### Endpoints
 

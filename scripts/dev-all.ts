@@ -12,13 +12,18 @@
  *   TA       -> http://localhost:3001   askeasy-dev-ta
  *   STUDENT  -> http://localhost:3002   askeasy-dev-student
  *
- * Extra instances of a role get sequential ports, distinct cookie names /
+ * PROF / TA / STUDENT are labels for which tab is which, not roles. Roles are
+ * granted per class by an admin, so a persona is a professor only once it has
+ * been assigned to a class — sign in as an admin (ADMIN_WHITELIST) and add the
+ * other personas' UTORids when you create the classlist.
+ *
+ * Extra instances of a label get sequential ports, distinct cookie names /
  * dist dirs, and numbered default identities (devprof2, …). Override with
- * DEV_<ROLE>_2_UTORID / _NAME / _ROLE / _EMAIL (and _3, …).
+ * DEV_<LABEL>_2_UTORID / _NAME / _EMAIL (and _3, …).
  *
  * Identity is process-global (src/app/api/auth/session/route.ts reads
- * DEV_UTORID / DEV_NAME / DEV_ROLE from the environment), so one identity
- * requires one process.
+ * DEV_UTORID / DEV_NAME from the environment), so one identity requires one
+ * process.
  *
  * Each child also gets its own SESSION_COOKIE_NAME. Browser cookies are keyed
  * by host and ignore the port, so without distinct names all instances would
@@ -43,15 +48,12 @@ dotenv.config({ path: ".env.local", override: true });
 // Personas
 // ---------------------------------------------------------------------------
 
-const ROLES = ["STUDENT", "TA", "PROFESSOR"] as const;
-type Role = (typeof ROLES)[number];
-
 interface PersonaBase {
   key: string;
   cookieName: string;
   distDir: string;
   color: string;
-  defaults: { utorid: string; name: string; role: Role };
+  defaults: { utorid: string; name: string };
 }
 
 interface PersonaSpec extends PersonaBase {
@@ -72,21 +74,21 @@ const PERSONA_BASES: PersonaBase[] = [
     cookieName: "askeasy-dev-prof",
     distDir: ".next-prof",
     color: "\x1b[35m", // magenta
-    defaults: { utorid: "devprof", name: "Dev Professor", role: "PROFESSOR" },
+    defaults: { utorid: "devprof", name: "Dev Professor" },
   },
   {
     key: "TA",
     cookieName: "askeasy-dev-ta",
     distDir: ".next-ta",
     color: "\x1b[36m", // cyan
-    defaults: { utorid: "devta", name: "Dev TA", role: "TA" },
+    defaults: { utorid: "devta", name: "Dev TA" },
   },
   {
     key: "STUDENT",
     cookieName: "askeasy-dev-student",
     distDir: ".next-student",
     color: "\x1b[32m", // green
-    defaults: { utorid: "devstudent", name: "Dev Student", role: "STUDENT" },
+    defaults: { utorid: "devstudent", name: "Dev Student" },
   },
 ];
 
@@ -95,7 +97,6 @@ interface ResolvedPersona {
   utorid: string;
   name: string;
   email: string;
-  role: Role;
 }
 
 const warnings: string[] = [];
@@ -151,7 +152,6 @@ function expandPersonas(profs: number, tas: number, students: number): PersonaSp
         defaults: {
           utorid: alone ? base.defaults.utorid : `${base.defaults.utorid}${i}`,
           name: alone ? base.defaults.name : `${base.defaults.name} ${i}`,
-          role: base.defaults.role,
         },
       });
     }
@@ -171,19 +171,12 @@ function resolvePersona(spec: PersonaSpec): ResolvedPersona {
 
   const utorid = read("UTORID", spec.defaults.utorid);
   const name = read("NAME", spec.defaults.name);
-  const role = read("ROLE", spec.defaults.role) as Role;
-
-  if (!ROLES.includes(role)) {
-    // route.ts casts DEV_ROLE straight to the Prisma enum, so a typo would
-    // otherwise surface as an opaque database error on first login.
-    errors.push(`DEV_${spec.envKey}_ROLE is "${role}" — must be one of ${ROLES.join(", ")}.`);
-  }
 
   // Always set explicitly: a single global DEV_EMAIL shared by all personas
   // would collide on the User table's unique email.
   const email = process.env[`DEV_${spec.envKey}_EMAIL`]?.trim() || `${utorid}@mail.utoronto.ca`;
 
-  return { spec, utorid, name, email, role };
+  return { spec, utorid, name, email };
 }
 
 // ---------------------------------------------------------------------------
@@ -278,11 +271,18 @@ function printSummary(resolved: ResolvedPersona[]): void {
 
   console.log("");
   const labelWidth = Math.max(8, ...resolved.map((p) => p.spec.key.length));
-  for (const { spec, utorid, name, role } of resolved) {
+  for (const { spec, utorid, name } of resolved) {
     const label = `${spec.color}${BOLD}${spec.key.padEnd(labelWidth)}${RESET}`;
     const url = `http://localhost:${spec.port}`;
-    console.log(`  ${label} ${url}   ${DIM}${name} (${utorid}, ${role})${RESET}`);
+    console.log(`  ${label} ${url}   ${DIM}${name} (${utorid})${RESET}`);
   }
+  console.log("");
+  console.log(
+    `${DIM}  Everyone starts as a student. Sign in as an admin (ADMIN_WHITELIST) to${RESET}`
+  );
+  console.log(
+    `${DIM}  create a classlist and assign the other personas as professors or TAs.${RESET}`
+  );
   console.log("");
 }
 
@@ -320,7 +320,7 @@ const READY_TIMEOUT_MS = 120_000;
 
 /** Spawns one instance and resolves once it reports ready (or gives up waiting). */
 function launch(persona: ResolvedPersona, tsx: string): Promise<void> {
-  const { spec, utorid, name, email, role } = persona;
+  const { spec, utorid, name, email } = persona;
 
   const child = spawn(tsx, ["watch", "src/server.ts"], {
     cwd: process.cwd(),
@@ -332,7 +332,6 @@ function launch(persona: ResolvedPersona, tsx: string): Promise<void> {
       DEV_UTORID: utorid,
       DEV_NAME: name,
       DEV_EMAIL: email,
-      DEV_ROLE: role,
       SESSION_COOKIE_NAME: spec.cookieName,
       NEXT_DIST_DIR: spec.distDir,
     },

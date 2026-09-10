@@ -1,46 +1,29 @@
 # AskEasy — Administrator Guide
 
-This guide is for professors and system administrators who need to manage the platform — handling course cleanup at the end of a semester, controlling who has professor access, and accessing the database directly if needed.
+This guide is for administrators who need to manage the platform — handling course cleanup at the end of a semester, controlling who can create classes, and accessing the database directly if needed.
 
 ---
 
-## Role Control Files
+## Who Can Do What
 
-Three plain-text files on the server control who can do what. All three live in the project root directory (`~/AskEasy/`).
+There is no global professor role. Everyone who signs in is a student until an admin
+puts them on a class.
 
-| File | What it controls |
-|------|-----------------|
-| `whitelist.txt` | Who gets the **PROFESSOR** role in the app |
-| `admin_whitelist.txt` | Who can access the **Admin Dashboard** at `/dashboard` |
+| Level         | How it is granted                                               | What it allows                                                   |
+| ------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Admin**     | `ADMIN_WHITELIST` env var (`admin_whitelist.txt` on the server) | Create classlists, assign professors and TAs, reach `/dashboard` |
+| **Professor** | Assigned by an admin when the classlist is created              | Runs one room — their own. Cannot see other professors' rooms    |
+| **TA**        | Assigned by an admin or by the professor of a room              | Answer questions and moderate, inside that one room              |
+| **Student**   | On the uploaded classlist, or joins with a room code            | Ask, upvote and reply                                            |
 
-Both files are read once at server startup and cached in memory. A restart is required to pick up any changes.
+An admin who creates a classlist gets a room of their own (as its professor) plus TA
+access to every other room on that classlist, so they can always see what is going on.
 
-### `whitelist.txt` — who gets the Professor role
+### `admin_whitelist.txt` — who can administer
 
-Any UTORid listed here is assigned the **PROFESSOR** role when they log in. Everyone else gets the **STUDENT** role by default.
-
-```
-# One UTORid per line. Lines starting with # are ignored.
-scalij
-phintr
-yousef10
-```
-
-The role is checked on every login, so changes take effect the next time the user logs in.
-
-**To add a new professor:**
-
-```bash
-ssh easy@redacted_ip
-echo "newutorid" >> ~/AskEasy/whitelist.txt
-docker restart ask_easy-app-1
-```
-
-**TAs are not listed here.** TAs are assigned per-course by professors through the app UI. A TA has elevated permissions only within the specific course they're assigned to.
-
-### `admin_whitelist.txt` — who can access the Admin Dashboard
-
-Any UTORid listed here gains access to the `/dashboard` admin panel. They must also be a PROFESSOR (i.e., also in `whitelist.txt`) for their role to function correctly, but the dashboard itself only checks this file.
+Any UTORid listed here can create classlists and reach the `/dashboard` admin panel.
+The file is read once at server startup and cached in memory, so a restart is required
+to pick up changes.
 
 ```
 # One UTORid per line. Lines starting with # are ignored.
@@ -55,6 +38,9 @@ echo "newutorid" >> ~/AskEasy/admin_whitelist.txt
 docker restart ask_easy-app-1
 ```
 
+**To add a new professor**, no server access is needed: an admin creates the classlist
+in the app and types the professor's UTORid. There is no `whitelist.txt` any more.
+
 Anyone not in this file who tries to visit `/dashboard` is silently redirected to the home page.
 
 ---
@@ -67,15 +53,15 @@ The **Dashboard** link appears in the **top-right corner of the home page** — 
 
 At the top of the page, seven live counters give you a snapshot of the platform:
 
-| Counter | What it shows |
-|---------|--------------|
-| Total Users | Everyone who has ever logged in |
-| Total Courses | All courses ever created |
-| Active Sessions | Sessions currently live |
-| Total Sessions | All sessions ever created |
-| Total Questions | All questions ever asked |
-| Total Answers | All answers ever posted |
-| Enrollments | Total course membership records |
+| Counter         | What it shows                   |
+| --------------- | ------------------------------- |
+| Total Users     | Everyone who has ever logged in |
+| Total Courses   | All courses ever created        |
+| Active Sessions | Sessions currently live         |
+| Total Sessions  | All sessions ever created       |
+| Total Questions | All questions ever asked        |
+| Total Answers   | All answers ever posted         |
+| Enrollments     | Total course membership records |
 
 Click **Refresh** (top right of the page) to reload the counts and all table data.
 
@@ -95,10 +81,12 @@ The landing tab when you open the dashboard. It has:
 **Columns:** Name, UTORid, Email, Role
 
 **Filters:**
+
 - Search by name or UTORid
 - Filter by role (Student / TA / Professor)
 
 **Actions:**
+
 - Delete a single user — removes the user and all their questions, answers, and enrollments across the platform
 - **Delete All Users** button — requires typing `DELETE USERS` to confirm; wipes every user record
 
@@ -109,9 +97,11 @@ The landing tab when you open the dashboard. It has:
 **Columns:** Code, Name, Semester, Created By, Enrollment count, Session count
 
 **Filters:**
+
 - Search by course code or name
 
 **Actions:**
+
 - Delete a single course — cascades to all its sessions, questions, answers, enrollments, and slides
 - **Delete All Courses** button — requires typing `DELETE COURSES` to confirm
 
@@ -122,10 +112,12 @@ The landing tab when you open the dashboard. It has:
 **Columns:** Title, Course, Status (ACTIVE / ENDED), Created By, Question count, Created date
 
 **Filters:**
+
 - Search by session title
 - Filter by status (Active / Scheduled / Ended)
 
 **Actions:**
+
 - Delete a single session — removes all its questions, answers, and uploaded slides
 - **Delete All Sessions** button — requires typing `DELETE SESSIONS` to confirm
 
@@ -138,6 +130,7 @@ The landing tab when you open the dashboard. It has:
 **Columns:** Metadata for every uploaded PDF, linked to its session
 
 **Actions:**
+
 - Delete individual slide set records
 - **Delete All Slide Sets** button
 
@@ -150,6 +143,7 @@ The landing tab when you open the dashboard. It has:
 **Columns:** Question content, session, author, status, timestamps
 
 **Actions:**
+
 - Delete individual questions
 - **Delete All Questions** button
 
@@ -160,10 +154,12 @@ The landing tab when you open the dashboard. It has:
 **Columns:** User name, UTORid, Course, Role (Student / TA / Professor)
 
 **Filters:**
+
 - Search by name, UTORid, or course code
 - Filter by role
 
 **Actions:**
+
 - Remove a single enrollment (removes the user from that course only, does not delete the user)
 - **Delete All Enrollments** button — requires typing `DELETE ENROLLMENTS` to confirm
 - Supports **Load More** pagination (loads 50 at a time)
@@ -231,26 +227,26 @@ docker exec -it ask_easy-postgres-1 psql -U postgres -d ask_easy
 
 Useful psql commands:
 
-| Command | What it does |
-|---------|-------------|
-| `\dt` | List all tables |
-| `\q` | Exit psql |
-| `SELECT * FROM "User";` | See all users who have logged in |
-| `SELECT * FROM "Course";` | See all courses |
-| `SELECT * FROM "Session";` | See all sessions |
+| Command                    | What it does                     |
+| -------------------------- | -------------------------------- |
+| `\dt`                      | List all tables                  |
+| `\q`                       | Exit psql                        |
+| `SELECT * FROM "User";`    | See all users who have logged in |
+| `SELECT * FROM "Course";`  | See all courses                  |
+| `SELECT * FROM "Session";` | See all sessions                 |
 
 ### Database tables
 
-| Table | What it stores |
-|-------|---------------|
-| `User` | Everyone who has logged in (UTORid, name, email, global role) |
-| `Course` | Courses created by professors |
-| `CourseEnrollment` | Which users are in which courses (STUDENT / TA / PROFESSOR) |
-| `Session` | Live Q&A sessions within a course |
-| `Question` | Questions asked during sessions |
-| `Answer` | Answers to questions |
-| `QuestionUpvote` / `AnswerUpvote` | Upvote records |
-| `SlideSet` | Uploaded PDF metadata (files live in `uploads/`) |
+| Table                             | What it stores                                                |
+| --------------------------------- | ------------------------------------------------------------- |
+| `User`                            | Everyone who has logged in (UTORid, name, email, global role) |
+| `Course`                          | Courses created by professors                                 |
+| `CourseEnrollment`                | Which users are in which courses (STUDENT / TA / PROFESSOR)   |
+| `Session`                         | Live Q&A sessions within a course                             |
+| `Question`                        | Questions asked during sessions                               |
+| `Answer`                          | Answers to questions                                          |
+| `QuestionUpvote` / `AnswerUpvote` | Upvote records                                                |
+| `SlideSet`                        | Uploaded PDF metadata (files live in `uploads/`)              |
 
 ---
 
@@ -271,11 +267,10 @@ Useful psql commands:
 
 ### Key files on the VM
 
-| File | Purpose |
-|------|---------|
-| `/etc/apache2/sites-enabled/askeasy.conf` | Apache vhost — TLS, reverse proxy, Shibboleth directives |
-| `/etc/shibboleth/shibboleth2.xml` | Shibboleth SP config — entity ID, IdP endpoint, metadata |
-| `/etc/shibboleth/utorauth_metadata_verify.crt` | U of T metadata signing certificate |
-| `/etc/letsencrypt/live/askeasy.utm.utoronto.ca/` | TLS certificates (auto-renewed by certbot) |
-| `~/AskEasy/whitelist.txt` | UTORids that receive the PROFESSOR role |
-| `~/AskEasy/admin_whitelist.txt` | UTORids that can access the `/dashboard` admin panel |
+| File                                             | Purpose                                                    |
+| ------------------------------------------------ | ---------------------------------------------------------- |
+| `/etc/apache2/sites-enabled/askeasy.conf`        | Apache vhost — TLS, reverse proxy, Shibboleth directives   |
+| `/etc/shibboleth/shibboleth2.xml`                | Shibboleth SP config — entity ID, IdP endpoint, metadata   |
+| `/etc/shibboleth/utorauth_metadata_verify.crt`   | U of T metadata signing certificate                        |
+| `/etc/letsencrypt/live/askeasy.utm.utoronto.ca/` | TLS certificates (auto-renewed by certbot)                 |
+| `~/AskEasy/admin_whitelist.txt`                  | UTORids that can create classlists and access `/dashboard` |
