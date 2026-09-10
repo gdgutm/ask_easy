@@ -18,18 +18,18 @@ import { parseAndProcessCSV } from "@/utils/create-class";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface CourseForModal {
+export interface ClasslistForModal {
   id: string;
   code: string;
-  name: string;
   semester: string;
 }
 
 interface ManageClassModalProps {
-  course: CourseForModal;
+  classlist: ClasslistForModal;
   onClose: () => void;
-  onRenamed: (courseId: string, code: string, semester: string) => void;
-  onDeleted: (courseId: string) => void;
+  /** Anything that changed the class — the caller re-fetches. */
+  onChanged: () => void;
+  onDeleted: () => void;
 }
 
 type Tab = "students" | "staff" | "rename" | "delete";
@@ -37,6 +37,15 @@ type Tab = "students" | "staff" | "rename" | "delete";
 interface RosterEntry {
   name: string;
   utorid: string;
+}
+
+interface RoomEntry {
+  id: string;
+  label: string;
+  professor: { name: string; utorid: string; hasLoggedIn: boolean } | null;
+  memberCount: number;
+  isLive: boolean;
+  isCreatorRoom: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -183,9 +192,9 @@ function RosterTable({
 // ---------------------------------------------------------------------------
 
 export default function ManageClassModal({
-  course,
+  classlist,
   onClose,
-  onRenamed,
+  onChanged,
   onDeleted,
 }: ManageClassModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>("students");
@@ -193,14 +202,13 @@ export default function ManageClassModal({
   // ---- Roster state ----
   const [rosterStudents, setRosterStudents] = useState<RosterEntry[]>([]);
   const [rosterTas, setRosterTas] = useState<RosterEntry[]>([]);
-  const [rosterProfessors, setRosterProfessors] = useState<RosterEntry[]>([]);
+  const [rooms, setRooms] = useState<RoomEntry[]>([]);
   const [rosterLoading, setRosterLoading] = useState(true);
   const [rosterError, setRosterError] = useState<string | null>(null);
 
   // ---- Search state ----
   const [studentSearch, setStudentSearch] = useState("");
   const [taSearch, setTaSearch] = useState("");
-  const [professorSearch, setProfessorSearch] = useState("");
 
   // ---- Remove state ----
   const [removingUtorid, setRemovingUtorid] = useState<string | null>(null);
@@ -209,32 +217,23 @@ export default function ManageClassModal({
   // ---- Add students state ----
   const [utoridsInput, setUtoridsInput] = useState("");
   const [addingStudents, setAddingStudents] = useState(false);
-  const [addResult, setAddResult] = useState<{
-    added: string[];
-    alreadyEnrolled: string[];
-    invalid: string[];
-  } | null>(null);
+  const [addResult, setAddResult] = useState<{ added: string[] } | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
 
   // ---- Add TAs state ----
   const [taUtoridsInput, setTaUtoridsInput] = useState("");
   const [addingTas, setAddingTas] = useState(false);
-  const [taAddResult, setTaAddResult] = useState<{
-    added: string[];
-    alreadyEnrolled: string[];
-    invalid: string[];
-  } | null>(null);
+  const [taAddResult, setTaAddResult] = useState<{ added: string[] } | null>(null);
   const [taAddError, setTaAddError] = useState<string | null>(null);
 
-  // ---- Add professors state ----
-  const [professorUtoridsInput, setProfessorUtoridsInput] = useState("");
-  const [addingProfessors, setAddingProfessors] = useState(false);
-  const [professorAddResult, setProfessorAddResult] = useState<{
-    added: string[];
-    alreadyEnrolled: string[];
-    invalid: string[];
-  } | null>(null);
+  // ---- Add professor state ----
+  const [professorUtorid, setProfessorUtorid] = useState("");
+  const [professorName, setProfessorName] = useState("");
+  const [professorKnown, setProfessorKnown] = useState(false);
+  const [addingProfessor, setAddingProfessor] = useState(false);
   const [professorAddError, setProfessorAddError] = useState<string | null>(null);
+  const [professorAddSuccess, setProfessorAddSuccess] = useState<string | null>(null);
+  const [removingRoomUtorid, setRemovingRoomUtorid] = useState<string | null>(null);
 
   // ---- CSV sync state ----
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -257,8 +256,8 @@ export default function ManageClassModal({
   const [csvError, setCsvError] = useState<string | null>(null);
 
   // ---- Rename state ----
-  const [newCode, setNewCode] = useState(course.code);
-  const [newSemester, setNewSemester] = useState(course.semester);
+  const [newCode, setNewCode] = useState(classlist.code);
+  const [newSemester, setNewSemester] = useState(classlist.semester);
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameSuccess, setRenameSuccess] = useState(false);
@@ -275,15 +274,22 @@ export default function ManageClassModal({
   async function fetchRoster() {
     setRosterError(null);
     try {
-      const res = await fetch(`/api/courses/${course.id}/students`);
-      const data = await res.json();
-      if (!res.ok) {
-        setRosterError(data.error ?? "Failed to load roster.");
+      const [rosterRes, detailRes] = await Promise.all([
+        fetch(`/api/classlists/${classlist.id}/students`),
+        fetch(`/api/classlists/${classlist.id}`),
+      ]);
+      const rosterData = await rosterRes.json();
+      if (!rosterRes.ok) {
+        setRosterError(rosterData.error ?? "Failed to load roster.");
         return;
       }
-      setRosterStudents(data.students ?? []);
-      setRosterTas(data.tas ?? []);
-      setRosterProfessors(data.professors ?? []);
+      setRosterStudents(rosterData.students ?? []);
+      setRosterTas(rosterData.tas ?? []);
+
+      if (detailRes.ok) {
+        const detailData = await detailRes.json();
+        setRooms(detailData.classlist?.rooms ?? []);
+      }
     } catch {
       setRosterError("Failed to load roster.");
     } finally {
@@ -294,7 +300,7 @@ export default function ManageClassModal({
   useEffect(() => {
     fetchRoster();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [course.id]);
+  }, [classlist.id]);
 
   // Recompute the CSV diff whenever either the parsed UTORids or the loaded
   // roster changes — this prevents stale-closure bugs where the roster hadn't
@@ -315,7 +321,7 @@ export default function ManageClassModal({
     setRemovingUtorid(utorid);
     setRemoveError(null);
     try {
-      const res = await fetch(`/api/courses/${course.id}/students`, {
+      const res = await fetch(`/api/classlists/${classlist.id}/students`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ utorid }),
@@ -325,10 +331,10 @@ export default function ManageClassModal({
         setRemoveError(data.error ?? "Failed to remove.");
         return;
       }
-      // Optimistically remove from local state
-      setRosterStudents((prev) => prev.filter((e) => e.utorid !== utorid));
-      setRosterTas((prev) => prev.filter((e) => e.utorid !== utorid));
-      setRosterProfessors((prev) => prev.filter((e) => e.utorid !== utorid));
+      // A TA is demoted to student rather than dropped, so re-read rather than
+      // guessing which list they landed in.
+      await fetchRoster();
+      onChanged();
     } catch {
       setRemoveError("Failed to remove. Please try again.");
     } finally {
@@ -348,7 +354,7 @@ export default function ManageClassModal({
     setAddResult(null);
 
     try {
-      const res = await fetch(`/api/courses/${course.id}/students`, {
+      const res = await fetch(`/api/classlists/${classlist.id}/students`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ utorids }),
@@ -380,7 +386,7 @@ export default function ManageClassModal({
     setTaAddResult(null);
 
     try {
-      const res = await fetch(`/api/courses/${course.id}/students`, {
+      const res = await fetch(`/api/classlists/${classlist.id}/students`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ utorids, role: "TA" }),
@@ -400,35 +406,97 @@ export default function ManageClassModal({
     }
   }
 
-  async function handleAddProfessors() {
-    const utorids = professorUtoridsInput
-      .split(/[\n,\s]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (utorids.length === 0) return;
-
-    setAddingProfessors(true);
+  // Adding a professor builds a room, so it takes one UTORid at a time and
+  // needs a name to label that room with.
+  async function handleProfessorUtoridChange(raw: string) {
+    const utorid = raw.trim().toLowerCase();
+    setProfessorUtorid(utorid);
     setProfessorAddError(null);
-    setProfessorAddResult(null);
+    setProfessorAddSuccess(null);
+    if (!utorid) {
+      setProfessorKnown(false);
+      setProfessorName("");
+      return;
+    }
 
     try {
-      const res = await fetch(`/api/courses/${course.id}/students`, {
+      const res = await fetch(`/api/users/lookup?utorids=${encodeURIComponent(utorid)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const match = data.users?.[0];
+      // The field may have moved on while this was in flight.
+      if (match?.utorid !== utorid) return;
+      if (match.hasLoggedIn && match.name) {
+        setProfessorKnown(true);
+        setProfessorName(match.name);
+      } else {
+        setProfessorKnown(false);
+      }
+    } catch {
+      /* leave the name editable — the admin can type one */
+    }
+  }
+
+  async function handleAddProfessor() {
+    const utorid = professorUtorid.trim().toLowerCase();
+    if (!utorid) return;
+    if (!professorName.trim()) {
+      setProfessorAddError("Add a name — it labels their room until they first sign in.");
+      return;
+    }
+
+    setAddingProfessor(true);
+    setProfessorAddError(null);
+    setProfessorAddSuccess(null);
+
+    try {
+      const res = await fetch(`/api/classlists/${classlist.id}/professors`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ utorids, role: "PROFESSOR" }),
+        body: JSON.stringify({
+          utorid,
+          ...(professorKnown ? {} : { displayName: professorName.trim() }),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setProfessorAddError(data.error ?? "Failed to add professors.");
+        setProfessorAddError(data.error ?? "Failed to add the professor.");
         return;
       }
-      setProfessorAddResult(data);
-      setProfessorUtoridsInput("");
+      setProfessorAddSuccess(`Created a room for ${data.room?.label ?? utorid}.`);
+      setProfessorUtorid("");
+      setProfessorName("");
+      setProfessorKnown(false);
       await fetchRoster();
+      onChanged();
     } catch {
-      setProfessorAddError("Failed to add professors. Please try again.");
+      setProfessorAddError("Failed to add the professor. Please try again.");
     } finally {
-      setAddingProfessors(false);
+      setAddingProfessor(false);
+    }
+  }
+
+  async function handleRemoveRoom(utorid: string) {
+    setRemovingRoomUtorid(utorid);
+    setProfessorAddError(null);
+    setProfessorAddSuccess(null);
+    try {
+      const res = await fetch(`/api/classlists/${classlist.id}/professors`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ utorid }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setProfessorAddError(data.error ?? "Failed to remove the professor.");
+        return;
+      }
+      await fetchRoster();
+      onChanged();
+    } catch {
+      setProfessorAddError("Failed to remove the professor. Please try again.");
+    } finally {
+      setRemovingRoomUtorid(null);
     }
   }
 
@@ -464,7 +532,7 @@ export default function ManageClassModal({
     setCsvSyncing(true);
     setCsvError(null);
     try {
-      const res = await fetch(`/api/courses/${course.id}/students`, {
+      const res = await fetch(`/api/classlists/${classlist.id}/students`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ utorids: csvPreview.utorids }),
@@ -479,6 +547,7 @@ export default function ManageClassModal({
       setCsvParsedUtorids(null);
       if (csvInputRef.current) csvInputRef.current.value = "";
       await fetchRoster();
+      onChanged();
     } catch {
       setCsvError("Failed to sync roster. Please try again.");
     } finally {
@@ -493,41 +562,41 @@ export default function ManageClassModal({
     setRenameSuccess(false);
 
     try {
-      const res = await fetch(`/api/courses/${course.id}`, {
+      const res = await fetch(`/api/classlists/${classlist.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: newCode.trim(), semester: newSemester.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setRenameError(data.error ?? "Failed to rename course.");
+        setRenameError(data.error ?? "Failed to rename the class.");
         return;
       }
       setRenameSuccess(true);
-      onRenamed(course.id, newCode.trim(), newSemester.trim());
+      onChanged();
     } catch {
-      setRenameError("Failed to rename course. Please try again.");
+      setRenameError("Failed to rename the class. Please try again.");
     } finally {
       setRenaming(false);
     }
   }
 
   async function handleDelete() {
-    if (deleteConfirmCode !== course.code) return;
+    if (deleteConfirmCode !== classlist.code) return;
     setDeleting(true);
     setDeleteError(null);
 
     try {
-      const res = await fetch(`/api/courses/${course.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/classlists/${classlist.id}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) {
-        setDeleteError(data.error ?? "Failed to delete course.");
+        setDeleteError(data.error ?? "Failed to delete the class.");
         return;
       }
-      onDeleted(course.id);
+      onDeleted();
       onClose();
     } catch {
-      setDeleteError("Failed to delete course. Please try again.");
+      setDeleteError("Failed to delete the class. Please try again.");
     } finally {
       setDeleting(false);
     }
@@ -551,9 +620,9 @@ export default function ManageClassModal({
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
             <p className="text-xs text-stone-400 font-medium uppercase tracking-wide">
-              Manage Class
+              Manage Classlist
             </p>
-            <h2 className="text-xl font-bold text-stone-900">{course.code}</h2>
+            <h2 className="text-xl font-bold text-stone-900">{classlist.code}</h2>
           </div>
           <button
             onClick={onClose}
@@ -568,7 +637,7 @@ export default function ManageClassModal({
           {(
             [
               { id: "students", label: "Students", icon: UserPlus },
-              { id: "staff", label: "Staff", icon: GraduationCap },
+              { id: "staff", label: "Rooms & TAs", icon: GraduationCap },
               { id: "rename", label: "Rename", icon: Pencil },
               { id: "delete", label: "Delete", icon: Trash2 },
             ] as { id: Tab; label: string; icon: React.ElementType }[]
@@ -609,9 +678,9 @@ export default function ManageClassModal({
               <div className="border-t border-stone-100 pt-4 flex flex-col gap-3">
                 <p className="text-sm font-medium text-stone-700">Sync Roster from CSV</p>
                 <p className="text-xs text-stone-500">
-                  Upload your updated class list CSV. Students added to the file will be enrolled;
-                  students removed from the file will be unenrolled. TAs and professors are not
-                  affected.
+                  Upload your updated class list CSV. Students added to the file are enrolled in
+                  every room; students removed from the file are unenrolled from every room. TAs and
+                  professors are not affected.
                 </p>
 
                 {/* File picker */}
@@ -694,7 +763,8 @@ export default function ManageClassModal({
               <div className="border-t border-stone-100 pt-4 flex flex-col gap-3">
                 <p className="text-sm font-medium text-stone-700">Add Students</p>
                 <p className="text-xs text-stone-500">
-                  Enter one or more UTORids — separated by commas, spaces, or new lines.
+                  Enter one or more UTORids — separated by commas, spaces, or new lines. They are
+                  added to every room on this class.
                 </p>
                 <textarea
                   value={utoridsInput}
@@ -709,20 +779,10 @@ export default function ManageClassModal({
                   className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
                 />
                 {addError && <p className="text-sm text-red-600">{addError}</p>}
-                {addResult && (
-                  <div className="text-sm space-y-1">
-                    {addResult.added.length > 0 && (
-                      <p className="text-green-700">Added: {addResult.added.join(", ")}</p>
-                    )}
-                    {addResult.alreadyEnrolled.length > 0 && (
-                      <p className="text-stone-500">
-                        Already enrolled: {addResult.alreadyEnrolled.join(", ")}
-                      </p>
-                    )}
-                    {addResult.invalid.length > 0 && (
-                      <p className="text-red-600">Invalid: {addResult.invalid.join(", ")}</p>
-                    )}
-                  </div>
+                {addResult && addResult.added.length > 0 && (
+                  <p className="text-sm text-green-700">
+                    Added to every room: {addResult.added.join(", ")}
+                  </p>
                 )}
                 <button
                   onClick={handleAddStudents}
@@ -735,67 +795,127 @@ export default function ManageClassModal({
             </div>
           )}
 
-          {/* ---- Staff (professors + TAs) ---- */}
+          {/* ---- Rooms (one per professor) + TAs ---- */}
           {activeTab === "staff" && (
             <div className="flex flex-col gap-8">
-              {/* Professors */}
+              {/* Rooms */}
               <div className="flex flex-col gap-4">
-                <p className="text-sm font-semibold text-stone-800">Professors</p>
-                <RosterTable
-                  entries={rosterProfessors}
-                  search={professorSearch}
-                  onSearchChange={setProfessorSearch}
-                  emptyMessage="No professors enrolled yet."
-                  loading={rosterLoading}
-                  error={rosterError}
-                  removingUtorid={removingUtorid}
-                  removeError={removeError}
-                  onRemove={handleRemove}
-                />
-                <div className="border-t border-stone-100 pt-4 flex flex-col gap-3">
-                  <p className="text-sm font-medium text-stone-700">Add Professors</p>
-                  <p className="text-xs text-stone-500">
-                    Enter one or more UTORids — separated by commas, spaces, or new lines.
-                    Professors can start sessions, control slides, and manage this course.
+                <div>
+                  <p className="text-sm font-semibold text-stone-800">Rooms</p>
+                  <p className="text-xs text-stone-500 mt-1">
+                    One per professor. Each professor sees only their own room; you are a TA in all
+                    of them.
                   </p>
-                  <textarea
-                    value={professorUtoridsInput}
+                </div>
+
+                {rosterLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="h-10 bg-stone-100 rounded animate-pulse" />
+                    ))}
+                  </div>
+                ) : rooms.length === 0 ? (
+                  <p className="text-xs text-stone-400 italic">No rooms yet.</p>
+                ) : (
+                  <ul className="border border-stone-200 rounded-lg divide-y divide-stone-100">
+                    {rooms.map((room) => (
+                      <li key={room.id} className="flex items-center gap-2 px-3 py-2.5 group">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium text-stone-800 truncate">
+                              {room.label}
+                            </span>
+                            {room.isLive && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-[10px] font-bold border border-green-200">
+                                LIVE
+                              </span>
+                            )}
+                            {room.isCreatorRoom && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-stone-100 text-stone-500 text-[10px] font-bold">
+                                YOURS
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-stone-400">
+                            {room.professor?.name ?? "Unassigned"}
+                            {room.professor ? ` · ${room.professor.utorid}` : ""} ·{" "}
+                            {room.memberCount} member{room.memberCount === 1 ? "" : "s"}
+                          </span>
+                          {room.professor && !room.professor.hasLoggedIn && (
+                            <span className="block text-[11px] text-amber-600">
+                              Temporary name until they sign in
+                            </span>
+                          )}
+                        </div>
+                        {room.professor && !room.isCreatorRoom && rooms.length > 1 && (
+                          <button
+                            onClick={() => handleRemoveRoom(room.professor!.utorid)}
+                            disabled={removingRoomUtorid === room.professor.utorid || room.isLive}
+                            title={
+                              room.isLive
+                                ? "End the session before removing this room"
+                                : "Remove this professor and delete their room"
+                            }
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                          >
+                            {removingRoomUtorid === room.professor.utorid ? (
+                              <span className="text-xs text-stone-400">…</span>
+                            ) : (
+                              <UserMinus className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <p className="text-xs text-stone-500">
+                  Removing a professor deletes their room and everything in it.
+                </p>
+
+                <div className="border-t border-stone-100 pt-4 flex flex-col gap-3">
+                  <p className="text-sm font-medium text-stone-700">Add a Professor</p>
+                  <p className="text-xs text-stone-500">
+                    This creates a new room named after them, with the current roster and TAs.
+                  </p>
+                  <input
+                    type="text"
+                    value={professorUtorid}
                     spellCheck={false}
-                    onChange={(e) => {
-                      setProfessorUtoridsInput(e.target.value);
-                      setProfessorAddResult(null);
-                      setProfessorAddError(null);
-                    }}
-                    placeholder={"smithj, doejohn, pannugun"}
-                    rows={3}
-                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
+                    onChange={(e) => handleProfessorUtoridChange(e.target.value)}
+                    placeholder="UTORid — e.g. smithj"
+                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
                   />
+                  <input
+                    type="text"
+                    value={professorName}
+                    spellCheck={false}
+                    disabled={professorKnown}
+                    onChange={(e) => setProfessorName(e.target.value)}
+                    placeholder="Full name — e.g. Jane Smith"
+                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all disabled:bg-stone-50 disabled:text-stone-500"
+                  />
+                  {professorKnown ? (
+                    <p className="text-xs text-emerald-600">Name from their U of T account.</p>
+                  ) : (
+                    professorUtorid.length > 0 && (
+                      <p className="text-xs text-amber-600">
+                        Hasn&rsquo;t signed in yet — this name is temporary and is replaced by their
+                        real one when they do.
+                      </p>
+                    )
+                  )}
                   {professorAddError && <p className="text-sm text-red-600">{professorAddError}</p>}
-                  {professorAddResult && (
-                    <div className="text-sm space-y-1">
-                      {professorAddResult.added.length > 0 && (
-                        <p className="text-green-700">
-                          Added: {professorAddResult.added.join(", ")}
-                        </p>
-                      )}
-                      {professorAddResult.alreadyEnrolled.length > 0 && (
-                        <p className="text-stone-500">
-                          Already enrolled: {professorAddResult.alreadyEnrolled.join(", ")}
-                        </p>
-                      )}
-                      {professorAddResult.invalid.length > 0 && (
-                        <p className="text-red-600">
-                          Invalid: {professorAddResult.invalid.join(", ")}
-                        </p>
-                      )}
-                    </div>
+                  {professorAddSuccess && (
+                    <p className="text-sm text-green-700">{professorAddSuccess}</p>
                   )}
                   <button
-                    onClick={handleAddProfessors}
-                    disabled={addingProfessors || professorUtoridsInput.trim().length === 0}
+                    onClick={handleAddProfessor}
+                    disabled={addingProfessor || professorUtorid.trim().length === 0}
                     className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                   >
-                    {addingProfessors ? "Adding…" : "Add Professors"}
+                    {addingProfessor ? "Creating room…" : "Add Professor & Create Room"}
                   </button>
                 </div>
               </div>
@@ -817,8 +937,9 @@ export default function ManageClassModal({
                 <div className="border-t border-stone-100 pt-4 flex flex-col gap-3">
                   <p className="text-sm font-medium text-stone-700">Add TAs</p>
                   <p className="text-xs text-stone-500">
-                    Enter one or more UTORids — separated by commas, spaces, or new lines. TAs can
-                    see all questions and answer in restricted mode.
+                    Enter one or more UTORids — separated by commas, spaces, or new lines. A TA here
+                    can see all questions and answer in restricted mode, in every room on this
+                    class.
                   </p>
                   <textarea
                     value={taUtoridsInput}
@@ -833,20 +954,10 @@ export default function ManageClassModal({
                     className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
                   />
                   {taAddError && <p className="text-sm text-red-600">{taAddError}</p>}
-                  {taAddResult && (
-                    <div className="text-sm space-y-1">
-                      {taAddResult.added.length > 0 && (
-                        <p className="text-green-700">Added: {taAddResult.added.join(", ")}</p>
-                      )}
-                      {taAddResult.alreadyEnrolled.length > 0 && (
-                        <p className="text-stone-500">
-                          Already enrolled: {taAddResult.alreadyEnrolled.join(", ")}
-                        </p>
-                      )}
-                      {taAddResult.invalid.length > 0 && (
-                        <p className="text-red-600">Invalid: {taAddResult.invalid.join(", ")}</p>
-                      )}
-                    </div>
+                  {taAddResult && taAddResult.added.length > 0 && (
+                    <p className="text-sm text-green-700">
+                      Added to every room: {taAddResult.added.join(", ")}
+                    </p>
                   )}
                   <button
                     onClick={handleAddTas}
@@ -864,7 +975,7 @@ export default function ManageClassModal({
           {activeTab === "rename" && (
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-stone-700">Course Code</label>
+                <label className="text-sm font-medium text-stone-700">Class Code</label>
                 <input
                   type="text"
                   value={newCode}
@@ -893,7 +1004,9 @@ export default function ManageClassModal({
               </div>
               {renameError && <p className="text-sm text-red-600">{renameError}</p>}
               {renameSuccess && (
-                <p className="text-sm text-green-700">Course updated successfully.</p>
+                <p className="text-sm text-green-700">
+                  Updated — every room now shows the new code.
+                </p>
               )}
               <button
                 onClick={handleRename}
@@ -901,7 +1014,7 @@ export default function ManageClassModal({
                   renaming ||
                   !newCode.trim() ||
                   !newSemester.trim() ||
-                  (newCode.trim() === course.code && newSemester.trim() === course.semester)
+                  (newCode.trim() === classlist.code && newSemester.trim() === classlist.semester)
                 }
                 className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
@@ -914,12 +1027,12 @@ export default function ManageClassModal({
           {activeTab === "delete" && (
             <div className="flex flex-col gap-4">
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                This will permanently delete <strong>{course.code}</strong> and all its sessions,
-                slides, and questions. This cannot be undone.
+                This will permanently delete <strong>{classlist.code}</strong>, all {rooms.length}{" "}
+                of its rooms, and every session, slide and question in them. This cannot be undone.
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-stone-700">
-                  Type <span className="font-mono font-bold">{course.code}</span> to confirm
+                  Type <span className="font-mono font-bold">{classlist.code}</span> to confirm
                 </label>
                 <input
                   type="text"
@@ -928,17 +1041,17 @@ export default function ManageClassModal({
                     setDeleteConfirmCode(e.target.value);
                     setDeleteError(null);
                   }}
-                  placeholder={course.code}
+                  placeholder={classlist.code}
                   className="border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-red-400"
                 />
               </div>
               {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
               <button
                 onClick={handleDelete}
-                disabled={deleting || deleteConfirmCode !== course.code}
+                disabled={deleting || deleteConfirmCode !== classlist.code}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
-                {deleting ? "Deleting…" : "Delete Course"}
+                {deleting ? "Deleting…" : "Delete Classlist"}
               </button>
             </div>
           )}

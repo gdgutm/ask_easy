@@ -34,7 +34,11 @@
     ".next-ta/types/**/*.ts",
     ".next-ta/dev/types/**/*.ts",
     ".next-student/types/**/*.ts",
-    ".next-student/dev/types/**/*.ts"
+    ".next-student/dev/types/**/*.ts",
+    ".next-probe-p/types/**/*.ts",
+    ".next-probe-p/dev/types/**/*.ts",
+    ".next-probe-a/types/**/*.ts",
+    ".next-probe-a/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", ".next", ".next-prof", ".next-ta", ".next-student"]
 }
