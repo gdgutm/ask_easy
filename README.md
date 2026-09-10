@@ -42,7 +42,7 @@ AskEasy is built for that moment. It gives every lecture a live Q&A room where t
         │   PostgreSQL 16  │     │      Redis 7         │
         │   (via Prisma)   │     │  - Socket.IO pub/sub │
         │                  │     │  - Rate limiting     │
-        │  Users, Courses  │     │  - Answer mode TTL   │
+        │ Users, Classlists│     │  - Answer mode TTL   │
         │  Sessions, Q&A   │     │  - Session data      │
         │  Upvotes, Slides │     └─────────────────────┘
         └──────────────────┘
@@ -330,8 +330,8 @@ Pull requests run the same build and tests but do not deploy. The workflow is [.
 src/
 ├── app/                  # Next.js App Router pages & API routes
 │   ├── api/              # REST endpoints (auth, courses, sessions, questions, cron)
-│   ├── classes/          # Course listing & management UI
-│   ├── create-class/     # Course creation flow
+│   ├── classes/          # Classlist management modal
+│   ├── create-class/     # Classlist creation flow (admins only)
 │   ├── room/             # Live session room (chat + slide viewer)
 │   └── admin/            # Admin dashboard (data overview, table wipe)
 ├── components/ui/        # Shared UI components (Radix-based)

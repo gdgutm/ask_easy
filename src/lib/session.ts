@@ -43,7 +43,7 @@ export function getSessionOptions(): SessionOptions {
       httpOnly: true,
       sameSite: "lax",
       // 8-hour session lifetime. Reduces the window where a revoked user's
-      // cookie stays valid after a whitelist update + server restart.
+      // cookie stays valid after an ADMIN_WHITELIST update + server restart.
       maxAge: 60 * 60 * 8,
     },
   };

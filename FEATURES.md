@@ -29,28 +29,51 @@ A comprehensive list of every feature in the AskEasy platform.
 
 ---
 
-## Course Management
+## Classlists and Rooms
+
+A **classlist** is what an admin uploads: one course code, one semester, one
+student roster. It owns one **room** per professor — a room is where the Q&A
+actually happens, and it has exactly one professor.
 
 ### Creation
 
-- Professors create courses with a course code, name, and optional section
+- **Admins only** (`ADMIN_WHITELIST`). Professors are assigned to a class; they do not make one
 - **Semester auto-detection** from current date (Jan–Apr = Winter, May–Aug = Summer, Sep–Dec = Fall)
 - **CSV enrollment** — upload a CSV with columns: `utorid`, `givenName`, `surname`, `Email` (optional); rows with "Missing UTORid" or "ERROR" are skipped
-- **TA assignment** — professors can designate TAs during course creation
+- **One room per professor** — the creating admin gets a room of their own plus TA access to every other room; each other professor gets one room and no access to the rest
+- **Professor names** — a UTORid that has signed in autofills its real name; one that has not takes a temporary name from the admin, replaced at first sign-in
+- **Room labels** — the professor's surname alone, disambiguated with a first initial when two collide and with the UTORid when that is still ambiguous
+- **TA assignment** — TAs added at creation are TAs in every room on the class
+
+### Who sees what
+
+|                  | Their own room | Other rooms on the class |
+| ---------------- | -------------- | ------------------------ |
+| Creating admin   | PROFESSOR      | TA                       |
+| Other professors | PROFESSOR      | No access at all         |
+| TAs              | —              | TA in all                |
+| Students         | —              | STUDENT in all           |
+
+Students see one card per class and open it to pick a room. A professor's class
+opens onto exactly one room. Join codes respect this too: a professor cannot use
+one to enter a colleague's room on the same class.
 
 ### Operations
 
-- **Rename** — professor can update course code and/or semester
-- **Delete** — cascading deletion (questions, answers, upvotes, slide sets, sessions, enrollments); blocked if an ACTIVE session exists
+- **Rename** — an admin updates the class code and/or semester; the change fans out to every room
+- **Delete** — cascading deletion (questions, answers, upvotes, slide sets, sessions, enrollments) across all rooms; blocked while any room is live
+- **Add a professor** — creates a room seeded with the current roster and TAs
+- **Remove a professor** — deletes their room; blocked on the last professor and on a live room
 
-### Student & TA Management
+### Roster Management
 
-- **View roster** — returns students and TAs with name and UTORid
-- **Add individuals** — add one or more UTORids; returns added, already-enrolled, and invalid lists
-- **Batch sync** — full replace of the STUDENT roster from a new CSV; preserves TAs and professor
-- **Remove** — remove a single student by UTORid
+- **View roster** — pooled across rooms; the strongest role wins, so a TA in one room is a TA on the class
+- **Add individuals** — added to every room on the class
+- **Batch sync** — full replace of the STUDENT roster from a new CSV, across every room; preserves TAs and professors
+- **Remove** — a TA is demoted to student, a student is dropped; a room's professor is refused and sent to the professors endpoint
 - **Auto-creation** — users not yet in the database are created automatically on enrollment
 - **CSV diff preview** — before applying a sync, shows counts of students to add, remove, and unchanged
+- **Room-level TAs** — a professor assigns TAs on their own room from inside a live session; a room takes only one professor, so that route refuses PROFESSOR
 
 ---
 
@@ -201,17 +224,21 @@ If Redis is unavailable, rate limiting fails closed (blocks all requests).
 
 ## Permissions Matrix
 
-### Course Operations
+### Class Operations
 
-| Action              | Student | TA  |  Professor  |
-| ------------------- | :-----: | :-: | :---------: |
-| Create course       |         |     |     Yes     |
-| View own courses    |   Yes   | Yes |     Yes     |
-| Rename course       |         |     | Yes (owner) |
-| Delete course       |         |     | Yes (owner) |
-| View roster         |         |     | Yes (owner) |
-| Add/remove students |         |     | Yes (owner) |
-| Sync CSV roster     |         |     | Yes (owner) |
+| Action                   | Student | TA  | Professor | Admin |
+| ------------------------ | :-----: | :-: | :-------: | :---: |
+| Create a classlist       |         |     |           |  Yes  |
+| View own classes/rooms   |   Yes   | Yes |    Yes    |  Yes  |
+| Rename a class           |         |     |           |  Yes  |
+| Delete a class           |         |     |           |  Yes  |
+| Add/remove a professor   |         |     |           |  Yes  |
+| View class roster        |         |     |           |  Yes  |
+| Add/remove students, TAs |         |     |           |  Yes  |
+| Sync CSV roster          |         |     |           |  Yes  |
+| Manage TAs on own room   |         |     |    Yes    | Yes¹  |
+
+¹ On the room they run. An admin is a TA in the other rooms on their classes, not their professor.
 
 ### Session Operations
 

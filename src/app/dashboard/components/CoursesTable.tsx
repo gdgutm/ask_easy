@@ -6,17 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Trash2, Search } from "lucide-react";
 import DeleteConfirmModal from "./DeleteConfirmModal";
 
-interface Course {
+/** One row is a room — one professor's space inside a classlist. */
+interface Room {
   id: string;
   code: string;
   name: string;
   semester: string;
   createdBy: { name: string; utorid: string };
+  professor: { name: string; utorid: string } | null;
+  classlist: { id: string; code: string } | null;
   _count: { enrollments: number; sessions: number };
 }
 
 export default function CoursesTable() {
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [courses, setCourses] = useState<Room[]>([]);
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{
     type: "single" | "all";
@@ -45,7 +48,7 @@ export default function CoursesTable() {
     if (res.ok) {
       fetchRef.current++;
       setCourses((prev) => prev.filter((c) => c.id !== courseId));
-    } else alert("Failed to delete course.");
+    } else alert("Failed to delete room.");
   };
 
   const confirmDeleteAll = async () => {
@@ -53,7 +56,7 @@ export default function CoursesTable() {
     if (res.ok) {
       fetchRef.current++;
       setCourses([]);
-    } else alert("Failed to delete all courses.");
+    } else alert("Failed to delete all rooms.");
   };
 
   return (
@@ -62,14 +65,14 @@ export default function CoursesTable() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <Input
-            placeholder="Search by code or name…"
+            placeholder="Search by code, name or professor…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <Button variant="destructive" onClick={() => setDeleteTarget({ type: "all" })}>
-          Delete All Courses
+          Delete All Rooms
         </Button>
       </div>
 
@@ -77,8 +80,8 @@ export default function CoursesTable() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-stone-50 text-stone-500">
-              <th className="text-left px-4 py-3 font-medium">Code</th>
-              <th className="text-left px-4 py-3 font-medium">Name</th>
+              <th className="text-left px-4 py-3 font-medium">Class</th>
+              <th className="text-left px-4 py-3 font-medium">Room (professor)</th>
               <th className="text-left px-4 py-3 font-medium">Semester</th>
               <th className="text-left px-4 py-3 font-medium">Created By</th>
               <th className="text-center px-4 py-3 font-medium">Enrollments</th>
@@ -96,14 +99,25 @@ export default function CoursesTable() {
             ) : courses.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-stone-400">
-                  No courses found.
+                  No rooms found.
                 </td>
               </tr>
             ) : (
               courses.map((course) => (
                 <tr key={course.id} className="border-b last:border-0 hover:bg-stone-50">
                   <td className="px-4 py-3 font-mono text-xs">{course.code}</td>
-                  <td className="px-4 py-3">{course.name}</td>
+                  <td className="px-4 py-3">
+                    {course.professor ? (
+                      <>
+                        {course.professor.name}{" "}
+                        <span className="text-stone-400 font-mono text-xs">
+                          {course.professor.utorid}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-stone-400 italic">Unassigned</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-stone-500">{course.semester}</td>
                   <td className="px-4 py-3 text-stone-500">{course.createdBy.name}</td>
                   <td className="px-4 py-3 text-center">{course._count.enrollments}</td>
@@ -130,11 +144,11 @@ export default function CoursesTable() {
       <DeleteConfirmModal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        title={deleteTarget?.type === "all" ? "Delete All Courses" : "Delete Course"}
+        title={deleteTarget?.type === "all" ? "Delete All Rooms" : "Delete Room"}
         description={
           deleteTarget?.type === "all" ? (
             <>
-              This will permanently delete <strong>ALL courses</strong> and{" "}
+              This will permanently delete <strong>ALL rooms and classlists</strong> and{" "}
               <strong>ALL their sessions, questions, and enrollments</strong>. This cannot be
               undone.
             </>
@@ -146,7 +160,7 @@ export default function CoursesTable() {
           )
         }
         requireTypeToConfirm={deleteTarget?.type === "all" ? "DELETE COURSES" : undefined}
-        confirmText={deleteTarget?.type === "all" ? "Delete All Courses" : "Delete Course"}
+        confirmText={deleteTarget?.type === "all" ? "Delete All Rooms" : "Delete Room"}
         onConfirm={async () => {
           if (deleteTarget?.type === "all") {
             await confirmDeleteAll();

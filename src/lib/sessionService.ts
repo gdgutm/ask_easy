@@ -196,10 +196,9 @@ export async function getSessionMembership(
 /**
  * Resolves the per-course role of several users in one query.
  *
- * CourseEnrollment is the source of truth for role-based UI: `User.role` is
- * global and stays STUDENT for someone who is a TA in a particular course.
- * Users with no enrollment row (e.g. a professor acting outside their own
- * courses) are absent from the map — fall back to their global role.
+ * CourseEnrollment is the only source of truth for role-based UI: `User.role`
+ * is always STUDENT now. Users with no enrollment row for this room are absent
+ * from the map, and callers treat that as STUDENT.
  */
 export async function getCourseRoles(
   courseId: string,
@@ -276,7 +275,8 @@ export async function validateProfessorRole(
  * Creates a new session for a course.
  * Validates professor role and generates unique join code.
  * If the course already has an ACTIVE session, returns that one instead of
- * creating a duplicate (co-professors must share one live room).
+ * creating a duplicate — a professor rejoining their own room must land in
+ * the session already running there.
  *
  * @param data - Session creation data (courseId, title, userId)
  * @returns Result with created (or existing) session or error
@@ -304,7 +304,7 @@ export async function createSession(data: SessionCreateInput): Promise<SessionCr
     createdAt: true,
   } as const;
 
-  // One live session per course — join the existing one if a co-prof already started it.
+  // One live session per room — hand back the running one rather than starting a second.
   const existing = await prisma.session.findFirst({
     where: { courseId, status: "ACTIVE" },
     select: sessionSelect,

@@ -9,7 +9,7 @@ import { getCurrentUser } from "@/lib/auth";
  * GET /api/sessions
  *
  * Returns active sessions for courses the user is enrolled in.
- * (Enrollment — not course.createdById — so co-professors see the same live session.)
+ * Enrollment-scoped, so this returns only the rooms the caller belongs to.
  */
 export async function GET() {
   try {
