@@ -1,4 +1,6 @@
 import type { Prisma, Role } from "@/generated/prisma";
+import { prisma } from "@/lib/prisma";
+import { deleteFile } from "@/lib/storage";
 
 // ---------------------------------------------------------------------------
 // Shared classlist helpers
@@ -178,4 +180,80 @@ export function buildEnrollmentRows(
   }
 
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Room teardown
+// ---------------------------------------------------------------------------
+
+/**
+ * Permanently removes rooms and everything hanging off them.
+ *
+ * Course has no cascades, so the order is manual:
+ *   QuestionUpvote → Answer → Question → slide files → SlideSet → Session
+ *   → CourseEnrollment → Course
+ *
+ * Slide files live on disk and are deleted first — a failure there is logged
+ * rather than thrown, since an orphaned file is a smaller problem than a
+ * half-deleted room.
+ */
+export async function deleteRooms(roomIds: string[]): Promise<void> {
+  if (roomIds.length === 0) return;
+
+  const sessions = await prisma.session.findMany({
+    where: { courseId: { in: roomIds } },
+    select: { id: true },
+  });
+  const sessionIds = sessions.map((s) => s.id);
+
+  if (sessionIds.length > 0) {
+    const slideSets = await prisma.slideSet.findMany({
+      where: { sessionId: { in: sessionIds } },
+      select: { storageKey: true },
+    });
+
+    await Promise.allSettled(
+      slideSets.map((slideSet) =>
+        deleteFile(slideSet.storageKey).catch((err) =>
+          console.error("[Classlist] Failed to delete slide file:", slideSet.storageKey, err)
+        )
+      )
+    );
+  }
+
+  await prisma.$transaction(
+    async (tx) => {
+      if (sessionIds.length > 0) {
+        const questions = await tx.question.findMany({
+          where: { sessionId: { in: sessionIds } },
+          select: { id: true },
+        });
+        const questionIds = questions.map((q) => q.id);
+
+        if (questionIds.length > 0) {
+          await tx.questionUpvote.deleteMany({ where: { questionId: { in: questionIds } } });
+          await tx.answer.deleteMany({ where: { questionId: { in: questionIds } } });
+          await tx.question.deleteMany({ where: { id: { in: questionIds } } });
+        }
+
+        await tx.slideSet.deleteMany({ where: { sessionId: { in: sessionIds } } });
+        await tx.session.deleteMany({ where: { id: { in: sessionIds } } });
+      }
+
+      await tx.courseEnrollment.deleteMany({ where: { courseId: { in: roomIds } } });
+      await tx.course.deleteMany({ where: { id: { in: roomIds } } });
+    },
+    { maxWait: 10_000, timeout: 120_000 }
+  );
+}
+
+/** Room ids of a classlist that currently have a live session. */
+export async function liveRoomIds(roomIds: string[]): Promise<string[]> {
+  if (roomIds.length === 0) return [];
+  const live = await prisma.session.findMany({
+    where: { courseId: { in: roomIds }, status: "ACTIVE" },
+    select: { courseId: true },
+    distinct: ["courseId"],
+  });
+  return live.map((s) => s.courseId);
 }
