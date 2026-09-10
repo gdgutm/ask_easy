@@ -21,6 +21,7 @@ beforeEach(async () => {
   await prisma.session.deleteMany();
   await prisma.courseEnrollment.deleteMany();
   await prisma.course.deleteMany();
+  await prisma.classlist.deleteMany();
   await prisma.user.deleteMany();
 });
 

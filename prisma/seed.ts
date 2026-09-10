@@ -13,6 +13,7 @@ async function main() {
   await prisma.session.deleteMany();
   await prisma.courseEnrollment.deleteMany();
   await prisma.course.deleteMany();
+  await prisma.classlist.deleteMany();
   await prisma.user.deleteMany();
 
   console.log("✅ All tables cleared. DB is empty and ready.\n");

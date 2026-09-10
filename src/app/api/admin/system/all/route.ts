@@ -11,7 +11,15 @@ export async function DELETE() {
 
     const adminUtorids = getAdminUtorids();
     const protectedUsers = await prisma.user.findMany({
-      where: { OR: [{ utorid: { in: adminUtorids } }, { role: "PROFESSOR" }] },
+      where: {
+        OR: [
+          { utorid: { in: adminUtorids } },
+          // Global User.role is always STUDENT — being a professor is an
+          // enrollment, so that is what has to be checked here.
+          { enrollments: { some: { role: "PROFESSOR" } } },
+          { createdClasslists: { some: {} } },
+        ],
+      },
       select: { id: true },
     });
     const protectedIds = protectedUsers.map((u) => u.id);
@@ -25,6 +33,7 @@ export async function DELETE() {
       prisma.session.deleteMany(),
       prisma.courseEnrollment.deleteMany(),
       prisma.course.deleteMany(),
+      prisma.classlist.deleteMany(),
       prisma.user.deleteMany(
         protectedIds.length > 0 ? { where: { id: { notIn: protectedIds } } } : undefined
       ),
