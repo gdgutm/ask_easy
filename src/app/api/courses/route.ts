@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { isAdmin } from "@/lib/adminWhitelist";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,7 +79,7 @@ export async function GET() {
  *     professors?: string[]      // optional co-professor UTORids
  *   }
  *
- * Only PROFESSOR-role users may call this endpoint.
+ * Only admins (ADMIN_WHITELIST) may call this endpoint.
  *
  * Response: { course: { id, code, name, semester } }
  */
@@ -89,8 +90,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
     }
 
-    if (user.role !== "PROFESSOR") {
-      return NextResponse.json({ error: "Only professors can create courses." }, { status: 403 });
+    if (!isAdmin(user.utorid)) {
+      return NextResponse.json({ error: "Only admins can create classes." }, { status: 403 });
     }
 
     let body: unknown;
@@ -135,7 +136,8 @@ export async function POST(request: NextRequest) {
 
     // Create the course and enroll the professor in one transaction
     const course = await prisma.$transaction(async (tx) => {
-      // Ensure the professor exists in the DB (in case of a system wipe)
+      // Ensure the creator exists in the DB (in case of a system wipe).
+      // User.role stays STUDENT — being a professor is a CourseEnrollment.
       await tx.user.upsert({
         where: { id: user.userId },
         update: {},
@@ -144,7 +146,7 @@ export async function POST(request: NextRequest) {
           utorid: user.utorid,
           email: user.email,
           name: user.name,
-          role: "PROFESSOR",
+          role: "STUDENT",
         },
       });
 

@@ -71,11 +71,15 @@ export default function LandingPage() {
     );
   }
 
-  const isGlobalProfessor = user.role === "PROFESSOR";
-  const showProfViewer = isGlobalProfessor || hasProfessorCourses;
-  // Don't mount the student viewer empty-state under a co-prof who only has professor courses.
+  // Only admins create classes. Professors are assigned to one, so their panel
+  // is driven by CourseEnrollment rather than any global role.
+  const showProfViewer = isAdmin || hasProfessorCourses;
+  // Don't mount the student viewer empty-state under a professor who only has
+  // professor courses.
   const showStudentViewer = hasStudentCourses || !showProfViewer;
-  const showLecturesHeader = hasProfessorCourses || hasStudentCourses;
+  // An admin with nothing yet still needs the header — that is where the
+  // Create button lives.
+  const showLecturesHeader = isAdmin || hasProfessorCourses || hasStudentCourses;
 
   const lecturesSubtitle = showProfViewer
     ? showStudentViewer
@@ -125,7 +129,7 @@ export default function LandingPage() {
                   </h2>
                   <p className="text-lg text-stone-500">{lecturesSubtitle}</p>
                 </div>
-                {isGlobalProfessor && (
+                {isAdmin && (
                   <Link
                     href="/create-class"
                     className="hidden sm:flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
@@ -138,11 +142,11 @@ export default function LandingPage() {
             )}
 
             <div className="flex flex-col gap-10">
-              {showProfViewer && <ProfCourseViewer canCreateClass={isGlobalProfessor} />}
+              {showProfViewer && <ProfCourseViewer canCreateClass={isAdmin} />}
               {showStudentViewer && <CourseViewer />}
             </div>
 
-            {isGlobalProfessor && showLecturesHeader && (
+            {isAdmin && showLecturesHeader && (
               <div className="max-w-6xl mx-auto w-full mt-8 sm:hidden">
                 <Link
                   href="/create-class"

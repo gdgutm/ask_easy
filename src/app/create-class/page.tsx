@@ -22,6 +22,7 @@ export default function CreateClassPage() {
   const [professorsInput, setProfessorsInput] = useState("");
   const [courseCodeInput, setCourseCodeInput] = useState("");
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -36,6 +37,7 @@ export default function CreateClassPage() {
             pfp: data.name?.[0]?.toUpperCase() ?? "?",
             role: data.role as User["role"],
           });
+          setIsAdmin(!!data.isAdmin);
         }
       })
       .catch(() => null);
@@ -108,7 +110,9 @@ export default function CreateClassPage() {
     );
   }
 
-  if (user.role !== "PROFESSOR") {
+  // Creating a class is an admin action — professors are assigned to a class,
+  // they do not make one.
+  if (!isAdmin) {
     return <NoPermissions user={user} />;
   }
 
