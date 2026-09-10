@@ -1,13 +1,15 @@
 import { CheckCircle2, File as FileIcon, X } from "lucide-react";
 import { ProcessedClassData } from "@/utils/types";
 
+import ProfessorList, { type ProfessorRow } from "./ProfessorList";
+
 interface PreviewClassProps {
   file: File;
   processedData: ProcessedClassData | null;
   onClear: () => void;
   onSubmit: () => void;
-  professorsInput: string;
-  onProfessorsChange: (value: string) => void;
+  professorRows: ProfessorRow[];
+  onProfessorRowsChange: (rows: ProfessorRow[]) => void;
   tasInput: string;
   onTasChange: (value: string) => void;
   courseCodeInput: string;
@@ -19,8 +21,8 @@ export default function PreviewClass({
   processedData,
   onClear,
   onSubmit,
-  professorsInput,
-  onProfessorsChange,
+  professorRows,
+  onProfessorRowsChange,
   tasInput,
   onTasChange,
   courseCodeInput,
@@ -107,24 +109,7 @@ export default function PreviewClass({
         </div>
       )}
 
-      {/* Co-professor UTORid input */}
-      <div className="space-y-3 mt-4">
-        <label className="text-xl font-bold text-stone-900 tracking-tight block">
-          Add Professors <span className="text-stone-400 font-normal text-base">(optional)</span>
-        </label>
-        <p className="text-sm text-stone-500">
-          Enter UTORids separated by commas, spaces, or new lines. Co-professors can start sessions,
-          control slides, and manage this course.
-        </p>
-        <textarea
-          value={professorsInput}
-          spellCheck={false}
-          onChange={(e) => onProfessorsChange(e.target.value)}
-          placeholder={"smithj, doejohn, pannugun"}
-          rows={3}
-          className="w-full border-2 border-stone-100 rounded-md px-4 py-3 text-sm font-mono resize-none focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all shadow-sm"
-        />
-      </div>
+      <ProfessorList rows={professorRows} onChange={onProfessorRowsChange} />
 
       {/* TA UTORid input */}
       <div className="space-y-3 mt-4">
@@ -133,7 +118,7 @@ export default function PreviewClass({
         </label>
         <p className="text-sm text-stone-500">
           Enter UTORids separated by commas, spaces, or new lines. TAs can answer all questions and
-          delete posts.
+          delete posts, in every room on this classlist.
         </p>
         <textarea
           value={tasInput}
@@ -149,7 +134,7 @@ export default function PreviewClass({
         onClick={onSubmit}
         className="w-full py-4 bg-green-500 text-white hover:bg-green-600 rounded-md font-bold shadow-sm transition-colors text-lg mt-8"
       >
-        Confirm & Create Lecture
+        Confirm & Create Classlist
       </button>
     </div>
   );

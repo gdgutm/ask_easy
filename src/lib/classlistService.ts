@@ -1,0 +1,181 @@
+import type { Prisma, Role } from "@/generated/prisma";
+
+// ---------------------------------------------------------------------------
+// Shared classlist helpers
+//
+// A classlist owns one room (Course) per professor. Everything in here is
+// about keeping those rooms consistent with each other: the same roster, the
+// same TAs, exactly one professor each.
+// ---------------------------------------------------------------------------
+
+export interface ProfessorInput {
+  utorid: string;
+  /** Temporary name to show until this person signs in. Ignored once they have. */
+  displayName?: string;
+}
+
+export interface StudentInput {
+  utorid: string;
+  givenName?: string;
+  surname?: string;
+}
+
+/** Placeholder UTORids the CSV parser emits for rows it could not read. */
+const INVALID_UTORIDS = new Set(["missing utorid", "error"]);
+
+export function getCurrentSemester(now: Date = new Date()): string {
+  const month = now.getMonth() + 1; // 1-indexed
+  const year = now.getFullYear();
+  if (month <= 4) return `Winter ${year}`;
+  if (month <= 8) return `Summer ${year}`;
+  return `Fall ${year}`;
+}
+
+/** Lower-cases, trims and de-duplicates a list of UTORids, dropping junk. */
+export function normalizeUtorids(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const utorid = entry.trim().toLowerCase();
+    if (utorid && !INVALID_UTORIDS.has(utorid)) out.add(utorid);
+  }
+  return [...out];
+}
+
+/**
+ * Accepts either `["smithj"]` or `[{ utorid, displayName }]` and normalizes to
+ * the latter. The plain-string form exists because not every caller has a name
+ * to offer (adding a professor from the roster screen, for instance).
+ */
+export function normalizeProfessorInputs(raw: unknown): ProfessorInput[] {
+  if (!Array.isArray(raw)) return [];
+  const byUtorid = new Map<string, ProfessorInput>();
+
+  for (const entry of raw) {
+    let utorid = "";
+    let displayName: string | undefined;
+
+    if (typeof entry === "string") {
+      utorid = entry.trim().toLowerCase();
+    } else if (entry && typeof entry === "object") {
+      const record = entry as Record<string, unknown>;
+      utorid = typeof record.utorid === "string" ? record.utorid.trim().toLowerCase() : "";
+      const name = typeof record.displayName === "string" ? record.displayName.trim() : "";
+      if (name) displayName = name;
+    }
+
+    if (!utorid || INVALID_UTORIDS.has(utorid)) continue;
+
+    // Later entries win only when they carry a name the earlier one lacked.
+    const existing = byUtorid.get(utorid);
+    if (!existing) byUtorid.set(utorid, { utorid, displayName });
+    else if (!existing.displayName && displayName) existing.displayName = displayName;
+  }
+
+  return [...byUtorid.values()];
+}
+
+export function normalizeStudentInputs(raw: unknown): StudentInput[] {
+  if (!Array.isArray(raw)) return [];
+  const byUtorid = new Map<string, StudentInput>();
+
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const utorid = typeof record.utorid === "string" ? record.utorid.trim().toLowerCase() : "";
+    if (!utorid || INVALID_UTORIDS.has(utorid)) continue;
+
+    byUtorid.set(utorid, {
+      utorid,
+      givenName: typeof record.givenName === "string" ? record.givenName.trim() : undefined,
+      surname: typeof record.surname === "string" ? record.surname.trim() : undefined,
+    });
+  }
+
+  return [...byUtorid.values()];
+}
+
+export function fullNameOf(student: StudentInput): string {
+  return `${student.givenName ?? ""} ${student.surname ?? ""}`.trim() || student.utorid;
+}
+
+type Tx = Prisma.TransactionClient;
+
+/**
+ * Finds or creates the User for a UTORid.
+ *
+ * `displayName` is only ever written to a user who has not signed in — their
+ * `name` is a placeholder at that point, so replacing it is an improvement.
+ * A real name from Shibboleth is never overwritten by something an admin typed.
+ */
+export async function upsertPersonByUtorid(
+  tx: Tx,
+  utorid: string,
+  displayName?: string
+): Promise<{ id: string; utorid: string; name: string; hasLoggedIn: boolean }> {
+  const existing = await tx.user.findUnique({
+    where: { utorid },
+    select: { id: true, utorid: true, name: true, hasLoggedIn: true },
+  });
+
+  if (!existing) {
+    return tx.user.create({
+      data: {
+        utorid,
+        name: displayName || utorid,
+        email: `${utorid}@mail.utoronto.ca`,
+        role: "STUDENT",
+      },
+      select: { id: true, utorid: true, name: true, hasLoggedIn: true },
+    });
+  }
+
+  if (displayName && !existing.hasLoggedIn && existing.name !== displayName) {
+    return tx.user.update({
+      where: { id: existing.id },
+      data: { name: displayName },
+      select: { id: true, utorid: true, name: true, hasLoggedIn: true },
+    });
+  }
+
+  return existing;
+}
+
+export interface RoomEnrollmentPlan {
+  roomId: string;
+  /** The room's one professor. */
+  professorId: string;
+  /** Everyone who gets TA access to this room (admin creator, classlist TAs). */
+  taIds: string[];
+  studentIds: string[];
+}
+
+/**
+ * Flattens per-room membership into CourseEnrollment rows, keeping the
+ * strongest role when someone appears in more than one list.
+ *
+ * The de-duplication matters: a classlist TA who is also on the student roster
+ * must not get two rows — the table has a unique (userId, courseId) — and must
+ * end up a TA, not a student.
+ */
+export function buildEnrollmentRows(
+  plans: RoomEnrollmentPlan[]
+): { userId: string; courseId: string; role: Role }[] {
+  const rows: { userId: string; courseId: string; role: Role }[] = [];
+
+  for (const plan of plans) {
+    const assigned = new Set<string>();
+    const add = (userId: string, role: Role) => {
+      if (assigned.has(userId)) return;
+      assigned.add(userId);
+      rows.push({ userId, courseId: plan.roomId, role });
+    };
+
+    add(plan.professorId, "PROFESSOR");
+    for (const id of plan.taIds) add(id, "TA");
+    for (const id of plan.studentIds) add(id, "STUDENT");
+  }
+
+  return rows;
+}
