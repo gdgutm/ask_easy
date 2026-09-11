@@ -8,7 +8,7 @@ import PostItem from "./post";
 import ChatHeader from "./ChatHeader";
 import ChatInput from "./ChatInput";
 import FilterTabs from "./FilterTabs";
-import type { Question, Comment, Role } from "@/utils/types";
+import type { Question, Comment, Role, User } from "@/utils/types";
 import { showRateLimitToast } from "@/components/RateLimitToast";
 
 // ---------------------------------------------------------------------------
@@ -416,21 +416,18 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
       authorRole: Role;
     }) => {
       if (!payload.authorName) return;
-      setQuestions((prev) =>
-        prev.map((q) =>
-          q.id === payload.id
-            ? {
-                ...q,
-                user: {
-                  id: payload.authorId,
-                  utorid: payload.authorUtorid ?? undefined,
-                  username: payload.authorName!,
-                  pfp: "",
-                  role: payload.authorRole,
-                },
-              }
-            : q
-        )
+      const author: User = {
+        id: payload.authorId,
+        utorid: payload.authorUtorid ?? undefined,
+        username: payload.authorName,
+        pfp: "",
+        role: payload.authorRole,
+      };
+      setQuestions((prev) => prev.map((q) => (q.id === payload.id ? { ...q, user: author } : q)));
+      // The export reads historyRef, so the reveal has to land there too —
+      // otherwise a live anonymous question stays unattributed in the transcript.
+      historyRef.current = historyRef.current.map((q) =>
+        q.id === payload.id ? { ...q, user: author } : q
       );
     };
 
@@ -443,29 +440,23 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
       authorRole: Role;
     }) => {
       if (!payload.authorName) return;
-      setQuestions((prev) =>
-        prev.map((q) =>
-          q.id === payload.questionId
-            ? {
-                ...q,
-                replies: q.replies.map((r) =>
-                  r.id === payload.id
-                    ? {
-                        ...r,
-                        user: {
-                          id: payload.authorId,
-                          utorid: payload.authorUtorid ?? undefined,
-                          username: payload.authorName!,
-                          pfp: "",
-                          role: payload.authorRole,
-                        },
-                      }
-                    : r
-                ),
-              }
-            : q
-        )
-      );
+      const author: User = {
+        id: payload.authorId,
+        utorid: payload.authorUtorid ?? undefined,
+        username: payload.authorName,
+        pfp: "",
+        role: payload.authorRole,
+      };
+      const attachAuthor = (q: Question): Question =>
+        q.id === payload.questionId
+          ? {
+              ...q,
+              replies: q.replies.map((r) => (r.id === payload.id ? { ...r, user: author } : r)),
+            }
+          : q;
+
+      setQuestions((prev) => prev.map(attachAuthor));
+      historyRef.current = historyRef.current.map(attachAuthor);
     };
 
     // Rate-limit refusals arrive already phrased for the user, and they are not
