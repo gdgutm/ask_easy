@@ -88,13 +88,13 @@ export default function ClassBrowser({ isAdmin }: ClassBrowserProps) {
       <div className="max-w-6xl mx-auto w-full mb-10 flex items-center justify-between gap-4">
         <div>
           <h2 className="text-4xl font-bold text-stone-900 tracking-tight mb-2">My Classes</h2>
-          <p className="text-lg text-stone-500">
-            {classlists.length === 0
-              ? isAdmin
-                ? "Upload a classlist to get started."
-                : "You aren't on any classes yet."
-              : "Open a class to see its rooms — one per professor."}
-          </p>
+          {/* The empty state already says there is nothing here, so the
+              subtitle would only repeat it. */}
+          {classlists.length > 0 && (
+            <p className="text-lg text-stone-500">
+              Open a class to see its rooms — one per professor.
+            </p>
+          )}
         </div>
         {isAdmin && classlists.length > 0 && (
           <Link

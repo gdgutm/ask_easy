@@ -72,7 +72,7 @@ export default function ProfessorList({ rows, onChange }: ProfessorListProps) {
               value={row.roomName}
               spellCheck={false}
               onChange={(e) => patch(row.key, { roomName: e.target.value })}
-              placeholder="Room name — ex. Smith"
+              placeholder="Room name — ex. Scali"
               className="flex-1 min-w-0 border-2 border-stone-100 rounded-md px-4 py-2.5 text-sm focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all shadow-sm"
             />
             <button

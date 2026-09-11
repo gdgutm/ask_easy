@@ -906,7 +906,7 @@ export default function ManageClassModal({
                     value={professorName}
                     spellCheck={false}
                     onChange={(e) => setProfessorName(e.target.value)}
-                    placeholder="Room name — ex. Smith"
+                    placeholder="Room name — ex. Scali"
                     className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
                   />
                   {professorAddError && <p className="text-sm text-red-600">{professorAddError}</p>}
