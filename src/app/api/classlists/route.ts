@@ -206,29 +206,37 @@ export async function POST(request: NextRequest) {
     );
 
     const created = await prisma.$transaction(async (tx) => {
-      // The creator's row can be missing after a system wipe — their session
-      // cookie outlives the database.
-      await tx.user.upsert({
-        where: { id: user.userId },
+      // Resolve the creator by UTORid, not by the id in their session cookie.
+      // The cookie outlives the database: after a wipe the row is recreated
+      // with a fresh id, and a cookie still carrying the old one would either
+      // collide on the unique UTORid here or write foreign keys pointing at a
+      // user who no longer exists. UTORid is the stable identity.
+      const creator = await tx.user.upsert({
+        where: { utorid: user.utorid },
         update: {},
         create: {
-          id: user.userId,
           utorid: user.utorid,
           email: user.email,
           name: user.name,
           role: "STUDENT",
         },
+        select: { id: true, name: true },
       });
+      const creatorId = creator.id;
 
       const classlist = await tx.classlist.create({
-        data: { code: classCode, semester, createdById: user.userId },
+        data: { code: classCode, semester, createdById: creatorId },
       });
 
       // Professors, creator first — their room is the one they run.
       // The creator's own room falls back to their surname; they never typed a
       // name for it.
       const professorUsers = [
-        { id: user.userId, utorid: creatorUtorid, roomName: surnameOf(user.name) || creatorUtorid },
+        {
+          id: creatorId,
+          utorid: creatorUtorid,
+          roomName: surnameOf(creator.name) || creatorUtorid,
+        },
       ];
       for (const input of professorInputs) {
         const person = await upsertPersonByUtorid(tx, input.utorid);
@@ -274,7 +282,7 @@ export async function POST(request: NextRequest) {
             code: classCode,
             name: professor.roomName,
             semester,
-            createdById: user.userId,
+            createdById: creatorId,
             classlistId: classlist.id,
             professorId: professor.id,
           },
@@ -291,7 +299,7 @@ export async function POST(request: NextRequest) {
           roomId: room.id,
           professorId: professor.id,
           // The admin who made the classlist watches every room they do not run.
-          taIds: [...(professor.id === user.userId ? [] : [user.userId]), ...taIds],
+          taIds: [...(professor.id === creatorId ? [] : [creatorId]), ...taIds],
           studentIds,
         });
       }
