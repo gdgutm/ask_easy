@@ -120,7 +120,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         where: { userId_courseId: { userId: user.userId, courseId: sessionRecord.courseId } },
         select: { role: true },
       });
-      if (!enrollment && user.role !== "PROFESSOR") {
+      if (!enrollment) {
         return NextResponse.json(
           { error: "You are not enrolled in this session." },
           { status: 403 }

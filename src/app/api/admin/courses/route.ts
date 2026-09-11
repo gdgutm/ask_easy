@@ -19,19 +19,25 @@ export async function GET(request: NextRequest) {
       where.OR = [
         { code: { contains: search, mode: "insensitive" } },
         { name: { contains: search, mode: "insensitive" } },
+        { professor: { name: { contains: search, mode: "insensitive" } } },
+        { professor: { utorid: { contains: search, mode: "insensitive" } } },
       ];
     }
 
-    const courses = await prisma.course.findMany({
+    // Rows are rooms, and every room on a class carries the same code — without
+    // the professor there is no way to tell one row from another.
+    const rooms = await prisma.course.findMany({
       where,
       include: {
         createdBy: { select: { name: true, utorid: true } },
+        professor: { select: { name: true, utorid: true } },
+        classlist: { select: { id: true, code: true } },
         _count: { select: { enrollments: true, sessions: true } },
       },
-      orderBy: { code: "asc" },
+      orderBy: [{ code: "asc" }, { professor: { name: "asc" } }],
     });
 
-    return NextResponse.json({ courses });
+    return NextResponse.json({ courses: rooms });
   } catch (error) {
     console.error("[Admin Courses] Failed to fetch courses:", error);
     return NextResponse.json({ error: "An error occurred." }, { status: 500 });

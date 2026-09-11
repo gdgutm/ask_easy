@@ -42,7 +42,7 @@ AskEasy is built for that moment. It gives every lecture a live Q&A room where t
         │   PostgreSQL 16  │     │      Redis 7         │
         │   (via Prisma)   │     │  - Socket.IO pub/sub │
         │                  │     │  - Rate limiting     │
-        │  Users, Courses  │     │  - Answer mode TTL   │
+        │ Users, Classlists│     │  - Answer mode TTL   │
         │  Sessions, Q&A   │     │  - Session data      │
         │  Upvotes, Slides │     └─────────────────────┘
         └──────────────────┘
@@ -97,8 +97,8 @@ SESSION_SECRET=<64-char-hex>
 # Cron job auth (for /api/cron/cleanup-sessions)
 CRON_SECRET=<random-secret>
 
-# Roles — comma-separated UTORids, case-insensitive
-PROFESSOR_WHITELIST=utorid1,utorid2
+# Admins — comma-separated UTORids, case-insensitive.
+# Admins create classlists and assign each one's professors and TAs.
 ADMIN_WHITELIST=utorid1
 ```
 
@@ -121,31 +121,28 @@ REDIS_URL=redis://:<password>@localhost:6379
 DEV_UTORID=yourutorid
 DEV_NAME=Your Name
 DEV_EMAIL=your.email@mail.utoronto.ca
-DEV_ROLE=PROFESSOR   # or STUDENT
 ```
 
 > **The `DEV_*` variables are ignored in production.** The auth route only reads them when `NODE_ENV !== "production"`; a production request arriving without a Shibboleth header is rejected with a 401 rather than falling back to `DEV_UTORID`. Keep them out of production environments regardless — `docker-compose.override.yml` is the only place they belong.
 
-| Variable                                    | Required | Description                                                                                                               |
-| ------------------------------------------- | :------: | ------------------------------------------------------------------------------------------------------------------------- |
-| `POSTGRES_USER` / `PASSWORD` / `DB`         |   Yes    | Postgres credentials                                                                                                      |
-| `REDIS_PASSWORD`                            |   Yes    | Passed to the Redis container as `--requirepass`                                                                          |
-| `SESSION_SECRET`                            |   Yes    | Key for iron-session cookie encryption. Changing it logs everyone out.                                                    |
-| `PROFESSOR_WHITELIST`                       |   Yes    | UTORids granted the PROFESSOR role on login. Everyone else is a STUDENT.                                                  |
-| `ADMIN_WHITELIST`                           |   Yes    | UTORids granted `/dashboard` access. Empty means nobody can administer.                                                   |
-| `CRON_SECRET`                               |   Yes    | Bearer token for the cleanup-sessions cron endpoint                                                                       |
-| `DATABASE_URL`                              |   Dev    | Only in `.env.local`; Compose derives it otherwise                                                                        |
-| `REDIS_URL`                                 |   Dev    | Only in `.env.local`; Compose derives it otherwise                                                                        |
-| `DEV_UTORID`                                |   Dev    | Fake UTORid injected when Shibboleth is not present                                                                       |
-| `DEV_NAME`                                  |   Dev    | Display name for the fake dev user                                                                                        |
-| `DEV_EMAIL`                                 |   Dev    | Email for the fake dev user; defaults to `<utorid>@mail.utoronto.ca`                                                      |
-| `DEV_ROLE`                                  |   Dev    | `PROFESSOR` or `STUDENT` — overrides whitelist lookup                                                                     |
-| `DEV_PROF_*` / `DEV_TA_*` / `DEV_STUDENT_*` |   Dev    | Per-persona `UTORID` / `NAME` / `ROLE` / `EMAIL` for `pnpm dev:all`. Each falls back to a default with a startup warning. |
-| `SESSION_COOKIE_NAME`                       |    No    | Set per instance by `pnpm dev:all`. Ignored in production.                                                                |
-| `NEXT_DIST_DIR`                             |    No    | Set per instance by `pnpm dev:all` so concurrent dev servers don't share `.next`.                                         |
-| `SOCKET_IO_USE_REDIS`                       |    No    | Set to `"false"` to disable the Socket.IO Redis adapter. Enabled otherwise.                                               |
+| Variable                                    | Required | Description                                                                                                      |
+| ------------------------------------------- | :------: | ---------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_USER` / `PASSWORD` / `DB`         |   Yes    | Postgres credentials                                                                                             |
+| `REDIS_PASSWORD`                            |   Yes    | Passed to the Redis container as `--requirepass`                                                                 |
+| `SESSION_SECRET`                            |   Yes    | Key for iron-session cookie encryption. Changing it logs everyone out.                                           |
+| `ADMIN_WHITELIST`                           |   Yes    | UTORids granted `/dashboard` access and the right to create classlists. Empty means nobody can administer.       |
+| `CRON_SECRET`                               |   Yes    | Bearer token for the cleanup-sessions cron endpoint                                                              |
+| `DATABASE_URL`                              |   Dev    | Only in `.env.local`; Compose derives it otherwise                                                               |
+| `REDIS_URL`                                 |   Dev    | Only in `.env.local`; Compose derives it otherwise                                                               |
+| `DEV_UTORID`                                |   Dev    | Fake UTORid injected when Shibboleth is not present                                                              |
+| `DEV_NAME`                                  |   Dev    | Display name for the fake dev user                                                                               |
+| `DEV_EMAIL`                                 |   Dev    | Email for the fake dev user; defaults to `<utorid>@mail.utoronto.ca`                                             |
+| `DEV_PROF_*` / `DEV_TA_*` / `DEV_STUDENT_*` |   Dev    | Per-persona `UTORID` / `NAME` / `EMAIL` for `pnpm dev:all`. Each falls back to a default with a startup warning. |
+| `SESSION_COOKIE_NAME`                       |    No    | Set per instance by `pnpm dev:all`. Ignored in production.                                                       |
+| `NEXT_DIST_DIR`                             |    No    | Set per instance by `pnpm dev:all` so concurrent dev servers don't share `.next`.                                |
+| `SOCKET_IO_USE_REDIS`                       |    No    | Set to `"false"` to disable the Socket.IO Redis adapter. Enabled otherwise.                                      |
 
-Whitelists are read once at startup and cached, so restart the app after changing them.
+`ADMIN_WHITELIST` is read once at startup and cached, so restart the app after changing it.
 
 ---
 
@@ -169,7 +166,7 @@ pnpm install
 
 Create `.env` and `.env.local` in the project root using the templates in [Environment Variables](#environment-variables) above. Both are gitignored, so a fresh clone has neither.
 
-Put your own UTORid in `PROFESSOR_WHITELIST` and `ADMIN_WHITELIST`, and set `DEV_UTORID` to the same value so your fake dev login picks up those roles.
+Put your own UTORid in `ADMIN_WHITELIST`, and set `DEV_UTORID` to the same value so your fake dev login can create classlists and reach `/dashboard`. Everyone else signs in as a student until an admin assigns them to a class.
 
 ### 3. Start the database and Redis
 
@@ -198,11 +195,17 @@ Open [http://localhost:3000](http://localhost:3000). The app auto-reloads on cha
 
 A single dev server can only ever be one user — identity comes from `DEV_UTORID` /
 `DEV_NAME` / `DEV_ROLE`, which are process-global. To test a student asking a question
-while a professor answers it, run three instances at once:
+while a professor answers it, run multiple instances at once:
 
 ```bash
-pnpm dev:all
+pnpm dev:all          # 1 professor, 1 TA, 1 student (default)
+pnpm dev:all 2 1 3    # 2 professors, 1 TA, 3 students
 ```
+
+Pass three non-negative integers: `<profs> <tas> <students>`. Omit them to get one of
+each. Ports are assigned sequentially from `3000`.
+
+Default layout (1 of each):
 
 | Persona   | URL                   | Cookie                |
 | --------- | --------------------- | --------------------- |
@@ -210,10 +213,10 @@ pnpm dev:all
 | `TA`      | http://localhost:3001 | `askeasy-dev-ta`      |
 | `STUDENT` | http://localhost:3002 | `askeasy-dev-student` |
 
-Open all three in tabs of the same window. Each instance gets its own session cookie
+Open the instances in tabs of the same window. Each instance gets its own session cookie
 name, so they don't clobber each other — browser cookies are keyed by host and ignore
 the port, meaning a single shared name would make every tab become whoever logged in
-last. All three share one Postgres and one Redis, which is what lets events broadcast
+last. All instances share one Postgres and one Redis, which is what lets events broadcast
 between them.
 
 Configure each persona in `.env` (all optional — anything missing falls back to a
@@ -233,20 +236,24 @@ DEV_STUDENT_NAME=Dev Student
 DEV_STUDENT_ROLE=STUDENT
 ```
 
+Extra instances of a label (e.g. a second professor tab) use numbered defaults
+(`devprof2`) and can be overridden with `DEV_PROF_2_UTORID` / `_NAME` / `_EMAIL` (same
+pattern for `TA` and `STUDENT`).
+
 Notes:
 
-- `DEV_ROLE` overrides the whitelist lookup, so the PROF persona does **not** need to be
-  in `PROFESSOR_WHITELIST`. It **does** need to be in `ADMIN_WHITELIST` for `/dashboard`
-  access, and whitelists are cached at startup — restart after editing.
+- PROF / TA / STUDENT label which tab is which; they are not roles. Every persona signs
+  in as a student. To give one professor or TA rights, sign in as an admin, create a
+  classlist and add that persona's UTORid. `ADMIN_WHITELIST` is cached at startup —
+  restart after editing.
 - Leave `SOCKET_IO_USE_REDIS` unset. With the adapter disabled, events don't cross
   instances: a question asked in one tab won't appear in the others until you refresh.
 - Each instance runs its own Next compiler against its own build dir (`.next-prof`,
-  `.next-ta`, `.next-student`), so expect roughly 3× the memory and CPU of `pnpm dev`.
+  `.next-ta`, `.next-student`, …), so expect roughly N× the memory and CPU of `pnpm dev`.
 - Instances start one at a time rather than all at once. Next rewrites `next-env.d.ts`
   during startup and each instance wants its own build dir in it, so concurrent
   startups interleave those writes and corrupt the file — which then breaks
-  `pnpm typecheck` and the pre-commit hook. Startup therefore takes about three
-  times as long as `pnpm dev`.
+  `pnpm typecheck` and the pre-commit hook. Startup therefore scales with instance count.
 - `pnpm dev` is unaffected and still uses the `ask_easy_session` cookie, so switching
   between the two modes won't log you out of either.
 
@@ -323,8 +330,8 @@ Pull requests run the same build and tests but do not deploy. The workflow is [.
 src/
 ├── app/                  # Next.js App Router pages & API routes
 │   ├── api/              # REST endpoints (auth, courses, sessions, questions, cron)
-│   ├── classes/          # Course listing & management UI
-│   ├── create-class/     # Course creation flow
+│   ├── classes/          # Classlist management modal
+│   ├── create-class/     # Classlist creation flow (admins only)
 │   ├── room/             # Live session room (chat + slide viewer)
 │   └── admin/            # Admin dashboard (data overview, table wipe)
 ├── components/ui/        # Shared UI components (Radix-based)
@@ -338,7 +345,7 @@ prisma/
 └── seed.ts               # Resets all tables (dev use only)
 ```
 
-Professor and admin permissions are set with the `PROFESSOR_WHITELIST` and `ADMIN_WHITELIST` environment variables — see [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) for details.
+Admin access is set with the `ADMIN_WHITELIST` environment variable. Professor and TA rights are granted per class by an admin — see [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) for details.
 
 ---
 

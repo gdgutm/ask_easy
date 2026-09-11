@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   Users,
   BookOpen,
+  DoorOpen,
   Radio,
   MessageSquare,
   MessageCircle,
@@ -24,6 +25,7 @@ import SlideSetsTable from "./components/SlideSetsTable";
 
 interface Stats {
   users: number;
+  classlists: number;
   courses: number;
   sessions: number;
   activeSessions: number;
@@ -61,7 +63,8 @@ export default function DashboardPage() {
 
   const statCards = [
     { label: "Total Users", value: stats?.users, icon: Users },
-    { label: "Total Courses", value: stats?.courses, icon: BookOpen },
+    { label: "Classlists", value: stats?.classlists, icon: BookOpen },
+    { label: "Rooms", value: stats?.courses, icon: DoorOpen },
     { label: "Active Sessions", value: stats?.activeSessions, icon: Radio },
     { label: "Total Sessions", value: stats?.sessions, icon: Radio },
     { label: "Total Questions", value: stats?.questions, icon: MessageSquare },
@@ -101,7 +104,7 @@ export default function DashboardPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="courses">Courses</TabsTrigger>
+          <TabsTrigger value="courses">Rooms</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
           <TabsTrigger value="slidesets">Slide Sets</TabsTrigger>
           <TabsTrigger value="questions">Questions</TabsTrigger>
@@ -181,7 +184,7 @@ export default function DashboardPage() {
           <>
             This action will permanently delete{" "}
             <strong>
-              absolutely ALL users, courses, sessions, questions, enrollments, and answers
+              absolutely ALL users, classlists, rooms, sessions, questions, enrollments, and answers
             </strong>{" "}
             in the database. This CANNOT be undone.
           </>

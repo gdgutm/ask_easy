@@ -1,70 +1,81 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { User } from "@/utils/types";
-import CourseViewer from "./components/CourseViewer";
-import footer from "./components/footer";
-import ProfCourseViewer from "./classes/ProfCourseViewer";
-import OnboardingCarousel from "./components/OnboardingCarousel";
-import { STUDENT_ONBOARDING_STEPS, PROF_ONBOARDING_STEPS } from "@/constants/onboarding";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getInitials, isLikelyAvatarImageUrl } from "@/utils/types";
-import { CircleHelp, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
+import { CircleHelp, LayoutDashboard } from "lucide-react";
+
+import { User, getInitials, isLikelyAvatarImageUrl } from "@/utils/types";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { STUDENT_ONBOARDING_STEPS, PROF_ONBOARDING_STEPS } from "@/constants/onboarding";
+import ClassBrowser from "./components/ClassBrowser";
+import OnboardingCarousel from "./components/OnboardingCarousel";
+import footer from "./components/footer";
 
 export default function LandingPage() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isInstructor, setIsInstructor] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.userId) {
-          const role = data.role as User["role"];
-          setUser({
-            id: data.userId,
-            username: data.name ?? data.utorid,
-            pfp: data.name?.[0]?.toUpperCase() ?? data.utorid?.[0]?.toUpperCase() ?? "?",
-            role,
-          });
-          setIsAdmin(!!data.isAdmin);
+    // Identity and enrollments are resolved together: which walkthrough to show
+    // depends on whether this person teaches anything, and that lives on their
+    // enrollments — the global role is always STUDENT now. Deciding before the
+    // enrollments land would show a professor the student walkthrough.
+    async function load() {
+      const [me, courses] = await Promise.all([
+        fetch("/api/auth/me")
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null),
+        fetch("/api/courses")
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null),
+      ]);
 
-          // Check for onboarding
-          const seenToken = `hasSeenOnboarding_${role}`;
-          if (!localStorage.getItem(seenToken)) {
-            setShowOnboarding(true);
-          }
-        }
-      })
-      .catch(() => null);
+      if (me?.userId) {
+        setUser({
+          id: me.userId,
+          username: me.name ?? me.utorid,
+          pfp: me.name?.[0]?.toUpperCase() ?? me.utorid?.[0]?.toUpperCase() ?? "?",
+          role: me.role as User["role"],
+        });
+        setIsAdmin(!!me.isAdmin);
+      }
+
+      const enrolled = (courses?.courses ?? []) as { role: string }[];
+      const instructor = !!me?.isAdmin || enrolled.some((c) => c.role === "PROFESSOR");
+      setIsInstructor(instructor);
+
+      try {
+        const seenToken = `hasSeenOnboarding_${instructor ? "INSTRUCTOR" : "STUDENT"}`;
+        if (me?.userId && !localStorage.getItem(seenToken)) setShowOnboarding(true);
+      } catch {
+        /* storage blocked — just skip the walkthrough */
+      }
+
+      setReady(true);
+    }
+
+    void load();
   }, []);
 
   const handleOnboardingComplete = () => {
-    if (user) {
-      localStorage.setItem(`hasSeenOnboarding_${user.role}`, "true");
+    try {
+      localStorage.setItem(`hasSeenOnboarding_${isInstructor ? "INSTRUCTOR" : "STUDENT"}`, "true");
+    } catch {
+      /* storage blocked — the walkthrough reappears next visit */
     }
     setShowOnboarding(false);
   };
 
-  if (!user) {
+  if (!ready || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <span className="text-stone-400 text-sm">Loading…</span>
       </div>
     );
   }
-
-  const getStepsForRole = () => {
-    switch (user.role) {
-      case "PROFESSOR":
-        return PROF_ONBOARDING_STEPS;
-      case "STUDENT":
-      default:
-        return STUDENT_ONBOARDING_STEPS;
-    }
-  };
 
   return (
     <div className="min-h-screen flex flex-col dot-grid relative">
@@ -95,7 +106,7 @@ export default function LandingPage() {
       <div className="overflow-y-auto flex-1 flex flex-col">
         <div className="flex-1 p-5 pt-16 pb-10 flex flex-col items-center">
           <div className="w-full max-w-7xl mx-auto flex-1 flex flex-col">
-            {user.role === "PROFESSOR" ? <ProfCourseViewer /> : <CourseViewer />}
+            <ClassBrowser isAdmin={isAdmin} />
           </div>
         </div>
         {footer()}
@@ -103,9 +114,9 @@ export default function LandingPage() {
 
       {showOnboarding && (
         <OnboardingCarousel
-          steps={getStepsForRole()}
+          steps={isInstructor ? PROF_ONBOARDING_STEPS : STUDENT_ONBOARDING_STEPS}
           onComplete={handleOnboardingComplete}
-          requireAgreement={user.role !== "PROFESSOR"}
+          requireAgreement={!isInstructor}
         />
       )}
     </div>

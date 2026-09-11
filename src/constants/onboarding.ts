@@ -41,7 +41,7 @@ export const PROF_ONBOARDING_STEPS: OnboardingStep[] = [
   {
     title: "Go Live & Share Slides",
     description: [
-      "Hit 'Go Live' on any course to start a session. Students will see it appear on their dashboard.",
+      "Open your class, then hit 'Start Live Session' on your room. Students will see it go green on their home page.",
       "Upload your lecture slides as a PDF and students will see them in a synced split-view alongside the chat.",
     ],
     image: "/images/onboarding/onboard-classes.jpg",
@@ -59,7 +59,7 @@ export const PROF_ONBOARDING_STEPS: OnboardingStep[] = [
   {
     title: "Manage & Export",
     description: [
-      "Assign TAs, moderate posts, and control answer permissions from within the session.",
+      "Assign TAs, moderate posts, and control answer permissions from within the session. Every professor on a class runs their own room and sees only that one.",
       "When you end a session, download the full Q&A transcript as a .txt file.",
     ],
     image: "/images/onboarding/onboard-end.jpg",

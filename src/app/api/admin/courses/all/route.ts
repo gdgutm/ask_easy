@@ -17,6 +17,7 @@ export async function DELETE() {
       prisma.session.deleteMany(),
       prisma.courseEnrollment.deleteMany(),
       prisma.course.deleteMany(),
+      prisma.classlist.deleteMany(),
     ]);
 
     return NextResponse.json({ success: true });

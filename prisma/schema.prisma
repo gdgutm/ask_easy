@@ -37,6 +37,19 @@ enum QuestionStatus {
 
 // =============================================================================
 // Models
+//
+// Classlist → Course → Session
+//
+// A **Classlist** is what an admin uploads: one course code, one semester, one
+// student roster. Nothing happens inside it directly.
+//
+// A **Course** row is a **room** — one professor's Q&A space for that classlist.
+// Creating a classlist creates one room per professor, and a room has exactly
+// one PROFESSOR enrollment (enforced by a partial unique index; see the
+// classlist_rooms migration). Everything session-scoped resolves permissions
+// through CourseEnrollment for the room, so a professor sees only their own.
+//
+// A **Session** is one live sitting of a room.
 // =============================================================================
 
 model User {
@@ -44,10 +57,13 @@ model User {
   utorid String @unique
   email String @unique
   name  String
+  /// Always STUDENT. Real roles live on CourseEnrollment, per room.
   role  Role   @default(STUDENT)
 
   enrollments       CourseEnrollment[]
   createdCourses    Course[]
+  createdClasslists Classlist[]        @relation("ClasslistCreator")
+  professorOfRooms  Course[]           @relation("RoomProfessor")
   createdSessions   Session[]
   questions         Question[]
   answers           Answer[]
@@ -58,19 +74,52 @@ model User {
   @@index([role])
 }
 
+/// One uploaded classlist: a course code, a semester and a student roster.
+/// Owns one room (Course) per professor.
+model Classlist {
+  id          String   @id @default(cuid())
+  code        String
+  semester    String
+  /// The admin who uploaded it. They get a room of their own and TA access to
+  /// every other room on this classlist.
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User     @relation("ClasslistCreator", fields: [createdById], references: [id])
+  rooms     Course[]
+
+  @@index([createdById])
+  @@index([semester])
+}
+
+/// A room — one professor's Q&A space for a classlist. Exactly one
+/// CourseEnrollment on it has role PROFESSOR.
 model Course {
   id        String   @id @default(cuid())
+  /// The classlist's code, copied here for display. Same across sibling rooms.
   code      String
+  /// The room's label, e.g. "Nakamura". Set by the admin who created the room
+  /// and only ever changed by an admin — it is the room's name, not the
+  /// professor's, so signing in never rewrites it.
   name      String
   semester  String
   createdById String
+  /// Null only for rooms created before classlists existed.
+  classlistId String?
+  /// The room's one professor.
+  professorId String?
 
   createdBy   User               @relation(fields: [createdById], references: [id])
+  classlist   Classlist?         @relation(fields: [classlistId], references: [id])
+  professor   User?              @relation("RoomProfessor", fields: [professorId], references: [id])
   enrollments CourseEnrollment[]
   sessions    Session[]
 
   @@index([createdById])
   @@index([semester])
+  @@index([classlistId])
+  @@index([professorId])
 }
 
 model CourseEnrollment {

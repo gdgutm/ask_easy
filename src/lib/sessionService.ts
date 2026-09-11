@@ -1,5 +1,8 @@
 import type { Role } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
+import { redisCache } from "@/lib/redis";
+import { answerMode, slideState } from "@/lib/redisKeys";
+import { releaseSlideControl } from "@/lib/slideControl";
 import { generateUniqueSessionCode } from "@/lib/sessionCode";
 import { deleteFile } from "@/lib/storage";
 import { getIO } from "@/socket";
@@ -120,12 +123,15 @@ export async function requireSocketEnrollment(
 }
 
 /**
- * Requires that the user is a PROFESSOR in the session's course.
+ * Requires that the user is the PROFESSOR of the session's room.
  * Throws `SessionNotFoundError`, `NotEnrolledError`, or `NotInstructorError`.
+ *
+ * For things only the room's owner may do: uploading slides, ending the
+ * lecture, changing who is allowed to answer.
  *
  * @returns The session's courseId
  */
-export async function requireSocketInstructor(
+export async function requireSocketProfessor(
   userId: string,
   sessionId: string
 ): Promise<{ courseId: string }> {
@@ -136,6 +142,31 @@ export async function requireSocketInstructor(
   }
 
   return { courseId };
+}
+
+/**
+ * Requires that the user is the PROFESSOR or a TA of the session's room —
+ * the people who run the lecture, which is also who the `:instructors` socket
+ * room contains.
+ *
+ * For things the teaching team shares: driving the slide deck everyone sees.
+ * Note this is deliberately not the same as `requireSocketProfessor`; the two
+ * are named apart because reading "instructor" as either one has been a
+ * reliable way to widen access by accident.
+ *
+ * @returns The session's courseId and the caller's role
+ */
+export async function requireSocketProfessorOrTA(
+  userId: string,
+  sessionId: string
+): Promise<{ courseId: string; role: Role }> {
+  const { role, courseId } = await requireSocketEnrollment(userId, sessionId);
+
+  if (role !== "PROFESSOR" && role !== "TA") {
+    throw new NotInstructorError(userId, sessionId, role);
+  }
+
+  return { courseId, role };
 }
 
 // ---------------------------------------------------------------------------
@@ -196,10 +227,9 @@ export async function getSessionMembership(
 /**
  * Resolves the per-course role of several users in one query.
  *
- * CourseEnrollment is the source of truth for role-based UI: `User.role` is
- * global and stays STUDENT for someone who is a TA in a particular course.
- * Users with no enrollment row (e.g. a professor acting outside their own
- * courses) are absent from the map — fall back to their global role.
+ * CourseEnrollment is the only source of truth for role-based UI: `User.role`
+ * is always STUDENT now. Users with no enrollment row for this room are absent
+ * from the map, and callers treat that as STUDENT.
  */
 export async function getCourseRoles(
   courseId: string,
@@ -275,9 +305,12 @@ export async function validateProfessorRole(
 /**
  * Creates a new session for a course.
  * Validates professor role and generates unique join code.
+ * If the course already has an ACTIVE session, returns that one instead of
+ * creating a duplicate — a professor rejoining their own room must land in
+ * the session already running there.
  *
  * @param data - Session creation data (courseId, title, userId)
- * @returns Result with created session or error
+ * @returns Result with created (or existing) session or error
  */
 export async function createSession(data: SessionCreateInput): Promise<SessionCreateResult> {
   const { courseId, title, userId } = data;
@@ -290,6 +323,26 @@ export async function createSession(data: SessionCreateInput): Promise<SessionCr
       error: roleValidation.error,
       statusCode: roleValidation.statusCode,
     };
+  }
+
+  const sessionSelect = {
+    id: true,
+    title: true,
+    joinCode: true,
+    status: true,
+    courseId: true,
+    createdById: true,
+    createdAt: true,
+  } as const;
+
+  // One live session per room — hand back the running one rather than starting a second.
+  const existing = await prisma.session.findFirst({
+    where: { courseId, status: "ACTIVE" },
+    select: sessionSelect,
+    orderBy: { startTime: "desc" },
+  });
+  if (existing) {
+    return { success: true, session: existing };
   }
 
   // Generate unique join code (cryptographically secure)
@@ -306,15 +359,7 @@ export async function createSession(data: SessionCreateInput): Promise<SessionCr
       isSubmissionsEnabled: true,
       startTime: new Date(),
     },
-    select: {
-      id: true,
-      title: true,
-      joinCode: true,
-      status: true,
-      courseId: true,
-      createdById: true,
-      createdAt: true,
-    },
+    select: sessionSelect,
   });
 
   return {
@@ -341,6 +386,19 @@ export async function performSessionEnd(sessionId: string): Promise<void> {
     io.to(`session:${sessionId}`).emit("session:ended", {});
   } catch {
     // Socket.IO not initialised in test environments — safe to ignore
+  }
+
+  // Ephemeral room state. Keys are scoped by session id so a stale one could
+  // never reach a new session, but a ended lecture has no business holding a
+  // slide position or a controller for another 24 hours.
+  try {
+    await Promise.all([
+      releaseSlideControl(sessionId),
+      redisCache.del(slideState(sessionId)),
+      redisCache.del(answerMode(sessionId)),
+    ]);
+  } catch (err) {
+    console.error("[SessionService] Failed to clean up Redis state for session:", sessionId, err);
   }
 
   try {

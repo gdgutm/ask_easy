@@ -9,9 +9,12 @@ export async function GET() {
     const guard = adminGuardResponse(user);
     if (guard) return guard;
 
-    const [users, courses, sessions, activeSessions, questions, answers, enrollments] =
+    const [users, classlists, courses, sessions, activeSessions, questions, answers, enrollments] =
       await Promise.all([
         prisma.user.count(),
+        prisma.classlist.count(),
+        // Course rows are rooms — one per professor, so this exceeds the
+        // classlist count whenever a class has more than one.
         prisma.course.count(),
         prisma.session.count(),
         prisma.session.count({ where: { status: "ACTIVE" } }),
@@ -22,6 +25,7 @@ export async function GET() {
 
     return NextResponse.json({
       users,
+      classlists,
       courses,
       sessions,
       activeSessions,

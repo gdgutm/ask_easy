@@ -8,7 +8,8 @@ import { getCurrentUser } from "@/lib/auth";
 /**
  * GET /api/sessions
  *
- * Returns active sessions with course info.
+ * Returns active sessions for courses the user is enrolled in.
+ * Enrollment-scoped, so this returns only the rooms the caller belongs to.
  */
 export async function GET() {
   try {
@@ -20,10 +21,7 @@ export async function GET() {
     const sessions = await prisma.session.findMany({
       where: {
         status: "ACTIVE",
-        course:
-          user.role === "PROFESSOR"
-            ? { createdById: user.userId }
-            : { enrollments: { some: { userId: user.userId } } },
+        course: { enrollments: { some: { userId: user.userId } } },
       },
       select: {
         id: true,

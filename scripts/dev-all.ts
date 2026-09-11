@@ -1,25 +1,35 @@
 /**
  * Multi-instance dev launcher — `pnpm dev:all`
  *
- * Spins up three dev servers, each permanently logged in as a different
- * persona, so multi-user flows (a student asking, a TA resolving, a professor
- * answering) can be tested in three tabs of one browser window.
+ * Spins up N professor, M TA, and K student dev servers so multi-user flows
+ * can be tested in multiple tabs of one browser window.
  *
+ *   pnpm dev:all          → 1 prof, 1 TA, 1 student (default)
+ *   pnpm dev:all 2 1 3    → 2 profs, 1 TA, 3 students
+ *
+ * Default layout (1 of each):
  *   PROF     -> http://localhost:3000   askeasy-dev-prof
  *   TA       -> http://localhost:3001   askeasy-dev-ta
  *   STUDENT  -> http://localhost:3002   askeasy-dev-student
  *
+ * PROF / TA / STUDENT are labels for which tab is which, not roles. Roles are
+ * granted per class by an admin, so a persona is a professor only once it has
+ * been assigned to a class — sign in as an admin (ADMIN_WHITELIST) and add the
+ * other personas' UTORids when you create the classlist.
+ *
+ * Extra instances of a label get sequential ports, distinct cookie names /
+ * dist dirs, and numbered default identities (devprof2, …). Override with
+ * DEV_<LABEL>_2_UTORID / _NAME / _EMAIL (and _3, …).
+ *
  * Identity is process-global (src/app/api/auth/session/route.ts reads
- * DEV_UTORID / DEV_NAME / DEV_ROLE from the environment), so one identity
- * requires one process. This script resolves each persona from the DEV_<P>_*
- * vars in .env, falls back to a documented default with a warning, and spawns
- * a child with those values injected.
+ * DEV_UTORID / DEV_NAME from the environment), so one identity requires one
+ * process.
  *
  * Each child also gets its own SESSION_COOKIE_NAME. Browser cookies are keyed
- * by host and ignore the port, so without distinct names all three instances
- * would share one cookie and every tab would become whoever logged in last.
+ * by host and ignore the port, so without distinct names all instances would
+ * share one cookie and every tab would become whoever logged in last.
  *
- * All three share one Postgres and one Redis — that is the point. The
+ * All instances share one Postgres and one Redis — that is the point. The
  * Socket.IO Redis adapter is what carries events between the processes.
  */
 import { spawn, type ChildProcess } from "node:child_process";
@@ -38,16 +48,18 @@ dotenv.config({ path: ".env.local", override: true });
 // Personas
 // ---------------------------------------------------------------------------
 
-const ROLES = ["STUDENT", "TA", "PROFESSOR"] as const;
-type Role = (typeof ROLES)[number];
-
-interface PersonaSpec {
+interface PersonaBase {
   key: string;
-  port: number;
   cookieName: string;
   distDir: string;
   color: string;
-  defaults: { utorid: string; name: string; role: Role };
+  defaults: { utorid: string; name: string };
+}
+
+interface PersonaSpec extends PersonaBase {
+  /** Env prefix: PROF, PROF_2, TA, STUDENT_3, … */
+  envKey: string;
+  port: number;
 }
 
 const RESET = "\x1b[0m";
@@ -56,30 +68,27 @@ const DIM = "\x1b[2m";
 const YELLOW = "\x1b[33m";
 const RED = "\x1b[31m";
 
-const PERSONAS: PersonaSpec[] = [
+const PERSONA_BASES: PersonaBase[] = [
   {
     key: "PROF",
-    port: 3000,
     cookieName: "askeasy-dev-prof",
     distDir: ".next-prof",
     color: "\x1b[35m", // magenta
-    defaults: { utorid: "devprof", name: "Dev Professor", role: "PROFESSOR" },
+    defaults: { utorid: "devprof", name: "Dev Professor" },
   },
   {
     key: "TA",
-    port: 3001,
     cookieName: "askeasy-dev-ta",
     distDir: ".next-ta",
     color: "\x1b[36m", // cyan
-    defaults: { utorid: "devta", name: "Dev TA", role: "TA" },
+    defaults: { utorid: "devta", name: "Dev TA" },
   },
   {
     key: "STUDENT",
-    port: 3002,
     cookieName: "askeasy-dev-student",
     distDir: ".next-student",
     color: "\x1b[32m", // green
-    defaults: { utorid: "devstudent", name: "Dev Student", role: "STUDENT" },
+    defaults: { utorid: "devstudent", name: "Dev Student" },
   },
 ];
 
@@ -88,15 +97,72 @@ interface ResolvedPersona {
   utorid: string;
   name: string;
   email: string;
-  role: Role;
 }
 
 const warnings: string[] = [];
 const errors: string[] = [];
 
+/** Parse `pnpm dev:all <profs> <tas> <students>`. Default 1 1 1. */
+function parseCounts(argv: string[]): { profs: number; tas: number; students: number } {
+  // Ignore a literal "--" if someone still uses the npm-style separator.
+  const args = argv.slice(2).filter((a) => a !== "--");
+  if (args.length === 0) return { profs: 1, tas: 1, students: 1 };
+
+  if (args.length !== 3) {
+    errors.push("Usage: pnpm dev:all <profs> <tas> <students>   (e.g. pnpm dev:all 2 1 3)");
+    return { profs: 0, tas: 0, students: 0 };
+  }
+
+  const nums = args.map((a) => Number(a));
+  if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
+    errors.push("Counts must be non-negative integers: <profs> <tas> <students>");
+    return { profs: 0, tas: 0, students: 0 };
+  }
+
+  const [profs, tas, students] = nums;
+  if (profs + tas + students === 0) {
+    errors.push("At least one instance is required.");
+    return { profs: 0, tas: 0, students: 0 };
+  }
+
+  return { profs, tas, students };
+}
+
+function expandPersonas(profs: number, tas: number, students: number): PersonaSpec[] {
+  const counts = [profs, tas, students];
+  let port = 3000;
+  const out: PersonaSpec[] = [];
+
+  for (let bi = 0; bi < PERSONA_BASES.length; bi++) {
+    const base = PERSONA_BASES[bi];
+    const count = counts[bi];
+    for (let i = 1; i <= count; i++) {
+      const alone = count === 1;
+      // First of a multi-set still uses DEV_PROF_* so existing .env keeps working;
+      // extras use DEV_PROF_2_*, DEV_PROF_3_*, …
+      const envKey = alone || i === 1 ? base.key : `${base.key}_${i}`;
+      const label = alone ? base.key : `${base.key}${i}`;
+      out.push({
+        key: label,
+        envKey,
+        port: port++,
+        cookieName: alone ? base.cookieName : `${base.cookieName}-${i}`,
+        distDir: alone ? base.distDir : `${base.distDir}-${i}`,
+        color: base.color,
+        defaults: {
+          utorid: alone ? base.defaults.utorid : `${base.defaults.utorid}${i}`,
+          name: alone ? base.defaults.name : `${base.defaults.name} ${i}`,
+        },
+      });
+    }
+  }
+
+  return out;
+}
+
 function resolvePersona(spec: PersonaSpec): ResolvedPersona {
   const read = (suffix: string, fallback: string): string => {
-    const varName = `DEV_${spec.key}_${suffix}`;
+    const varName = `DEV_${spec.envKey}_${suffix}`;
     const value = process.env[varName]?.trim();
     if (value) return value;
     warnings.push(`${varName} is not set — using default "${fallback}".`);
@@ -105,19 +171,12 @@ function resolvePersona(spec: PersonaSpec): ResolvedPersona {
 
   const utorid = read("UTORID", spec.defaults.utorid);
   const name = read("NAME", spec.defaults.name);
-  const role = read("ROLE", spec.defaults.role) as Role;
 
-  if (!ROLES.includes(role)) {
-    // route.ts casts DEV_ROLE straight to the Prisma enum, so a typo would
-    // otherwise surface as an opaque database error on first login.
-    errors.push(`DEV_${spec.key}_ROLE is "${role}" — must be one of ${ROLES.join(", ")}.`);
-  }
+  // Always set explicitly: a single global DEV_EMAIL shared by all personas
+  // would collide on the User table's unique email.
+  const email = process.env[`DEV_${spec.envKey}_EMAIL`]?.trim() || `${utorid}@mail.utoronto.ca`;
 
-  // Always set explicitly: a single global DEV_EMAIL shared by all three
-  // personas would collide on the User table's unique email.
-  const email = process.env[`DEV_${spec.key}_EMAIL`]?.trim() || `${utorid}@mail.utoronto.ca`;
-
-  return { spec, utorid, name, email, role };
+  return { spec, utorid, name, email };
 }
 
 // ---------------------------------------------------------------------------
@@ -211,11 +270,19 @@ function printSummary(resolved: ResolvedPersona[]): void {
   }
 
   console.log("");
-  for (const { spec, utorid, name, role } of resolved) {
-    const label = `${spec.color}${BOLD}${spec.key.padEnd(8)}${RESET}`;
+  const labelWidth = Math.max(8, ...resolved.map((p) => p.spec.key.length));
+  for (const { spec, utorid, name } of resolved) {
+    const label = `${spec.color}${BOLD}${spec.key.padEnd(labelWidth)}${RESET}`;
     const url = `http://localhost:${spec.port}`;
-    console.log(`  ${label} ${url}   ${DIM}${name} (${utorid}, ${role})${RESET}`);
+    console.log(`  ${label} ${url}   ${DIM}${name} (${utorid})${RESET}`);
   }
+  console.log("");
+  console.log(
+    `${DIM}  Everyone starts as a student. Sign in as an admin (ADMIN_WHITELIST) to${RESET}`
+  );
+  console.log(
+    `${DIM}  create a classlist and assign the other personas as professors or TAs.${RESET}`
+  );
   console.log("");
 }
 
@@ -253,7 +320,7 @@ const READY_TIMEOUT_MS = 120_000;
 
 /** Spawns one instance and resolves once it reports ready (or gives up waiting). */
 function launch(persona: ResolvedPersona, tsx: string): Promise<void> {
-  const { spec, utorid, name, email, role } = persona;
+  const { spec, utorid, name, email } = persona;
 
   const child = spawn(tsx, ["watch", "src/server.ts"], {
     cwd: process.cwd(),
@@ -265,7 +332,6 @@ function launch(persona: ResolvedPersona, tsx: string): Promise<void> {
       DEV_UTORID: utorid,
       DEV_NAME: name,
       DEV_EMAIL: email,
-      DEV_ROLE: role,
       SESSION_COOKIE_NAME: spec.cookieName,
       NEXT_DIST_DIR: spec.distDir,
     },
@@ -315,19 +381,28 @@ function launch(persona: ResolvedPersona, tsx: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const resolved = PERSONAS.map(resolvePersona);
+  const { profs, tas, students } = parseCounts(process.argv);
+  if (errors.length > 0) {
+    console.error("");
+    for (const error of errors) console.error(`${RED}✖${RESET}  ${error}`);
+    console.error("");
+    process.exit(1);
+  }
+
+  const specs = expandPersonas(profs, tas, students);
+  const resolved = specs.map(resolvePersona);
 
   // Two personas sharing a utorid are the same database user, which defeats
-  // the entire purpose of running three instances.
+  // the purpose of running multiple instances.
   const seen = new Map<string, string>();
   for (const { spec, utorid } of resolved) {
     const previous = seen.get(utorid.toLowerCase());
     if (previous) {
       errors.push(
-        `DEV_${spec.key}_UTORID and DEV_${previous}_UTORID are both "${utorid}" — each persona needs a distinct UTORid.`
+        `DEV_${spec.envKey}_UTORID and DEV_${previous}_UTORID are both "${utorid}" — each persona needs a distinct UTORid.`
       );
     }
-    seen.set(utorid.toLowerCase(), spec.key);
+    seen.set(utorid.toLowerCase(), spec.envKey);
   }
 
   const portChecks = await Promise.all(
@@ -354,7 +429,7 @@ async function main(): Promise<void> {
   //
   // Next rewrites next-env.d.ts (and can rewrite tsconfig.json) during
   // app.prepare(), and each instance wants its own distDir in the import line.
-  // Launching all three at once interleaves those writes and corrupts the file,
+  // Launching all at once interleaves those writes and corrupts the file,
   // which then breaks `pnpm typecheck` and the pre-commit hook.
   for (const persona of resolved) {
     await launch(persona, tsx);

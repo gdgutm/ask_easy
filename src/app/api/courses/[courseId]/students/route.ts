@@ -3,6 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
+// ---------------------------------------------------------------------------
+// Room-level roster
+//
+// This is what a professor uses on their own room — chiefly assigning TAs from
+// inside a live session. Changes here affect one room only.
+//
+// Professors are not managed here. A room has exactly one, enforced by a
+// partial unique index, and adding one means creating a room: that is
+// /api/classlists/[classlistId]/professors, and it is an admin action.
+// ---------------------------------------------------------------------------
+
 interface RouteParams {
   params: Promise<{ courseId: string }>;
 }
@@ -12,11 +23,11 @@ interface RouteParams {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns all enrolled students and TAs for a course.
+ * Returns this room's students, TAs and its one professor.
  *
- * Returns: { students: [{name, utorid}], tas: [{name, utorid}] }
+ * Returns: { students, tas, professors } each [{name, utorid}]
  *
- * Only the professor enrolled in the course may call this.
+ * Only this room's professor may call it.
  */
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
@@ -33,26 +44,27 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     });
     if (!enrollment || enrollment.role !== "PROFESSOR") {
       return NextResponse.json(
-        { error: "Only the course professor can view the roster." },
+        { error: "Only this room’s professor can view its roster." },
         { status: 403 }
       );
     }
 
     const enrollments = await prisma.courseEnrollment.findMany({
-      where: { courseId, role: { in: ["STUDENT", "TA"] } },
+      where: { courseId, role: { in: ["STUDENT", "TA", "PROFESSOR"] } },
       include: { user: { select: { name: true, utorid: true } } },
       orderBy: { user: { name: "asc" } },
     });
 
-    const students = enrollments
-      .filter((e) => e.role === "STUDENT")
-      .map((e) => ({ name: e.user.name, utorid: e.user.utorid }));
+    const mapEntry = (e: (typeof enrollments)[number]) => ({
+      name: e.user.name,
+      utorid: e.user.utorid,
+    });
 
-    const tas = enrollments
-      .filter((e) => e.role === "TA")
-      .map((e) => ({ name: e.user.name, utorid: e.user.utorid }));
-
-    return NextResponse.json({ students, tas });
+    return NextResponse.json({
+      students: enrollments.filter((e) => e.role === "STUDENT").map(mapEntry),
+      tas: enrollments.filter((e) => e.role === "TA").map(mapEntry),
+      professors: enrollments.filter((e) => e.role === "PROFESSOR").map(mapEntry),
+    });
   } catch (error) {
     console.error("[Courses API] Failed to fetch roster:", error);
     return NextResponse.json({ error: "An error occurred." }, { status: 500 });
@@ -64,17 +76,17 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 // ---------------------------------------------------------------------------
 
 /**
- * Adds one or more students to a course by UTORid.
+ * Adds one or more students or TAs to this room by UTORid.
  *
- * Request body: { utorids: string[] }
+ * Request body: { utorids: string[]; role?: "STUDENT" | "TA" }
  *
  * For each UTORid:
  *   - Upserts the User (creates with default name = utorid if new)
- *   - Creates a STUDENT CourseEnrollment (skips if already enrolled)
+ *   - Creates the enrollment (updates the role if one already exists)
  *
  * Returns per-UTORid results: { added: string[], alreadyEnrolled: string[], invalid: string[] }
  *
- * Only the professor enrolled in the course may call this.
+ * Only this room's professor may call it.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
@@ -92,7 +104,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
     if (!enrollment || enrollment.role !== "PROFESSOR") {
       return NextResponse.json(
-        { error: "Only the course professor can add students." },
+        { error: "Only this room’s professor can add people to it." },
         { status: 403 }
       );
     }
@@ -119,7 +131,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "utorids must be a non-empty array." }, { status: 400 });
     }
 
-    // Only STUDENT and TA are valid enrollment roles for this endpoint
+    if (roleParam === "PROFESSOR") {
+      return NextResponse.json(
+        {
+          error:
+            "A room has one professor. Ask an admin to add another professor to the class — it creates them a room of their own.",
+        },
+        { status: 400 }
+      );
+    }
+
     const enrollmentRole: "STUDENT" | "TA" = roleParam === "TA" ? "TA" : "STUDENT";
 
     const added: string[] = [];
@@ -133,7 +154,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         continue;
       }
 
-      // User.role is NOT changed here — global role is managed by whitelist only
+      // User.role is NOT changed — it is always STUDENT. Roles are per room.
       const enrolledUser = await prisma.user.upsert({
         where: { utorid },
         update: {},
@@ -186,11 +207,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
  *
  * - Students in the new list but not enrolled → added as STUDENT
  * - Students currently enrolled as STUDENT but not in the new list → removed
- * - TAs and the PROFESSOR are never touched.
+ * - TAs and the professor are never touched.
  *
  * Returns: { added: string[], removed: string[], unchanged: number }
  *
- * Only the professor enrolled in the course may call this.
+ * Only this room's professor may call it.
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
@@ -207,7 +228,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     });
     if (!enrollment || enrollment.role !== "PROFESSOR") {
       return NextResponse.json(
-        { error: "Only the course professor can sync the roster." },
+        { error: "Only this room’s professor can sync its roster." },
         { status: 403 }
       );
     }
@@ -271,6 +292,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
       // Never overwrite an existing PROFESSOR or TA enrollment — only create
       // new STUDENT enrollments or leave an already-STUDENT enrollment alone.
+      // The professor appearing on a student CSV must stay the professor.
       const existingEnrollment = await prisma.courseEnrollment.findUnique({
         where: { userId_courseId: { userId: enrolledUser.id, courseId } },
         select: { role: true },
@@ -310,11 +332,15 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // ---------------------------------------------------------------------------
 
 /**
- * Removes a student or TA enrollment from a course by UTORid.
+ * Demotes a TA to STUDENT in this room. Demoting a student is a no-op.
+ *
+ * The row is demoted rather than deleted so the person stays reachable in a
+ * live session instead of being kicked mid-lecture.
  *
  * Request body: { utorid: string }
  *
- * Only the professor enrolled in the course may call this.
+ * Only this room's professor may call it, and the professor themselves cannot
+ * be demoted — see the guard below.
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
@@ -331,7 +357,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     });
     if (!enrollment || enrollment.role !== "PROFESSOR") {
       return NextResponse.json(
-        { error: "Only the course professor can remove students." },
+        { error: "Only this room’s professor can remove people from it." },
         { status: 403 }
       );
     }
@@ -348,8 +374,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "utorid is required." }, { status: 400 });
     }
 
+    const normalizedUtorid = utorid.trim().toLowerCase();
     const target = await prisma.user.findUnique({
-      where: { utorid: utorid.trim().toLowerCase() },
+      where: { utorid: normalizedUtorid },
       select: { id: true },
     });
     if (!target) {
@@ -362,18 +389,26 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!targetEnrollment) {
       return NextResponse.json({ error: "User is not enrolled in this course." }, { status: 404 });
     }
+
+    // The room's professor is the room. Demoting them would leave it with
+    // nobody able to start a session and no label to show.
     if (targetEnrollment.role === "PROFESSOR") {
-      return NextResponse.json({ error: "Cannot remove the course professor." }, { status: 403 });
+      return NextResponse.json(
+        {
+          error:
+            "This room's professor cannot be removed here. An admin removes a professor from the class, which deletes their room.",
+        },
+        { status: 403 }
+      );
     }
 
-    // Demote TA back to STUDENT rather than removing them from the course entirely.
-    // This preserves their enrollment so they stay in any active session.
+    // Demote to STUDENT rather than deleting the row — keeps them in live sessions.
     await prisma.courseEnrollment.update({
       where: { userId_courseId: { userId: target.id, courseId } },
       data: { role: "STUDENT" },
     });
 
-    return NextResponse.json({ removed: utorid.trim().toLowerCase() });
+    return NextResponse.json({ removed: normalizedUtorid });
   } catch (error) {
     console.error("[Courses API] Failed to remove student:", error);
     return NextResponse.json({ error: "An error occurred." }, { status: 500 });

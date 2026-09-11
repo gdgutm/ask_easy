@@ -15,11 +15,9 @@ A comprehensive list of every feature in the AskEasy platform.
 
 ### Role System
 
-- **Two-tier roles**:
-  - **Global role** — determined from `whitelist.txt` on every login (PROFESSOR or STUDENT)
-  - **Per-course role** — stored in `CourseEnrollment` (PROFESSOR, TA, or STUDENT)
-- **Whitelist** — plain text file of UTORids; case-insensitive; supports legacy `utorid,PROFESSOR` format
-- **Effective permissions** — course/session actions use the per-course enrollment role, not the global role
+- **Roles are per class** — stored in `CourseEnrollment` (PROFESSOR, TA, or STUDENT). Every login writes `User.role = STUDENT`; there is no global professor role to authorize on.
+- **Admins** — `ADMIN_WHITELIST` (case-insensitive UTORids) is the only global permission. Admins create classlists and assign each one's professors and TAs.
+- **Effective permissions** — every course/session action resolves the caller's `CourseEnrollment` role for that specific course
 
 ### Endpoints
 
@@ -31,28 +29,51 @@ A comprehensive list of every feature in the AskEasy platform.
 
 ---
 
-## Course Management
+## Classlists and Rooms
+
+A **classlist** is what an admin uploads: one course code, one semester, one
+student roster. It owns one **room** per professor — a room is where the Q&A
+actually happens, and it has exactly one professor.
 
 ### Creation
 
-- Professors create courses with a course code, name, and optional section
+- **Admins only** (`ADMIN_WHITELIST`). Professors are assigned to a class; they do not make one
 - **Semester auto-detection** from current date (Jan–Apr = Winter, May–Aug = Summer, Sep–Dec = Fall)
 - **CSV enrollment** — upload a CSV with columns: `utorid`, `givenName`, `surname`, `Email` (optional); rows with "Missing UTORid" or "ERROR" are skipped
-- **TA assignment** — professors can designate TAs during course creation
+- **One room per professor** — the creating admin gets a room of their own plus TA access to every other room; each other professor gets one room and no access to the rest
+- **Room names** — the admin types a name for each professor's room (the creator's own defaults to their surname). It is the room's name, not the professor's: signing in never rewrites it, and only an admin changes it afterwards
+- **TA assignment** — TAs added at creation are TAs in every room on the class
+
+### Who sees what
+
+|                  | Their own room | Other rooms on the class |
+| ---------------- | -------------- | ------------------------ |
+| Creating admin   | PROFESSOR      | TA                       |
+| Other professors | PROFESSOR      | No access at all         |
+| TAs              | —              | TA in all                |
+| Students         | —              | STUDENT in all           |
+
+Students see one card per class and open it to pick a room. A professor's class
+opens onto exactly one room. Join codes respect this too: a professor cannot use
+one to enter a colleague's room on the same class.
 
 ### Operations
 
-- **Rename** — professor can update course code and/or semester
-- **Delete** — cascading deletion (questions, answers, upvotes, slide sets, sessions, enrollments); blocked if an ACTIVE session exists
+- **Rename** — an admin updates the class code and/or semester; the change fans out to every room
+- **Delete** — cascading deletion (questions, answers, upvotes, slide sets, sessions, enrollments) across all rooms; blocked while any room is live
+- **Add a professor** — creates a room, named by the admin, seeded with the current roster and TAs
+- **Rename a room** — admin-only; the professor of a room cannot rename it
+- **Remove a professor** — deletes their room; blocked on the last professor and on a live room
 
-### Student & TA Management
+### Roster Management
 
-- **View roster** — returns students and TAs with name and UTORid
-- **Add individuals** — add one or more UTORids; returns added, already-enrolled, and invalid lists
-- **Batch sync** — full replace of the STUDENT roster from a new CSV; preserves TAs and professor
-- **Remove** — remove a single student by UTORid
+- **View roster** — pooled across rooms; the strongest role wins, so a TA in one room is a TA on the class
+- **Add individuals** — added to every room on the class
+- **Batch sync** — full replace of the STUDENT roster from a new CSV, across every room; preserves TAs and professors
+- **Remove** — a TA is demoted to student, a student is dropped; a room's professor is refused and sent to the professors endpoint
 - **Auto-creation** — users not yet in the database are created automatically on enrollment
 - **CSV diff preview** — before applying a sync, shows counts of students to add, remove, and unchanged
+- **Room-level TAs** — a professor assigns TAs on their own room from inside a live session; a room takes only one professor, so that route refuses PROFESSOR
 
 ---
 
@@ -130,7 +151,7 @@ A comprehensive list of every feature in the AskEasy platform.
 
 - **PDF only** — validated by MIME type, magic bytes, and parseability
 - **Size limits** — 1 KB to 50 MB
-- Professor-only; session must be ACTIVE
+- Professor-only (a TA can drive the deck but never replace it); session must be ACTIVE
 
 ### Viewing
 
@@ -139,9 +160,25 @@ A comprehensive list of every feature in the AskEasy platform.
 
 ### Real-Time Sync
 
-- Professor changes the page index; broadcast to all participants via `slide:changed`
-- Late joiners call `slide:sync` to get the current page
+- **One person drives at a time.** The room's professor and its TAs may each take the deck; taking it displaces whoever had it. Uploading stays the professor's alone
+- The holder's page changes are broadcast to every participant via `slide:changed`; `slide:change` from anyone who is not currently holding the deck is refused
+- Control is held in Redis (`slide-controller:{sessionId}`, 24 h) and is **unclaimed by default** — until someone presses the button it belongs to the room's professor, so starting a lecture needs no extra step
+- `slide:control:take` claims it and pulls the room to the taker's current page, so taking over while reading ahead brings everyone along. `slide:control:changed` tells the room who is driving, which is what returns the displaced holder's toolbar to the following view
+- Late joiners call `slide:sync` and get both the current page and the current holder
 - New upload triggers `slides:available` notification to the room
+- Ending a lecture clears the slide position, the controller and the answer mode
+
+### Viewer toolbar
+
+| Who                              | What they see                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Holding the deck**             | Controlling badge, viewer count, page controls — plus Replace and End Lecture if they are the professor |
+| **Professor or TA, not holding** | Exactly the student bar, plus a **Control Slides** button                                               |
+| **Student**                      | Following Live / Browse Freely, page controls when browsing                                             |
+
+A professor who has been taken over lands on the same bar a TA sees, with the
+same button back — so control can pass back and forth without anyone needing to
+release it first.
 
 ### Split View
 
@@ -203,28 +240,36 @@ If Redis is unavailable, rate limiting fails closed (blocks all requests).
 
 ## Permissions Matrix
 
-### Course Operations
+### Class Operations
 
-| Action              | Student | TA  |  Professor  |
-| ------------------- | :-----: | :-: | :---------: |
-| Create course       |         |     |     Yes     |
-| View own courses    |   Yes   | Yes |     Yes     |
-| Rename course       |         |     | Yes (owner) |
-| Delete course       |         |     | Yes (owner) |
-| View roster         |         |     | Yes (owner) |
-| Add/remove students |         |     | Yes (owner) |
-| Sync CSV roster     |         |     | Yes (owner) |
+| Action                   | Student | TA  | Professor | Admin |
+| ------------------------ | :-----: | :-: | :-------: | :---: |
+| Create a classlist       |         |     |           |  Yes  |
+| View own classes/rooms   |   Yes   | Yes |    Yes    |  Yes  |
+| Rename a class           |         |     |           |  Yes  |
+| Delete a class           |         |     |           |  Yes  |
+| Add/remove a professor   |         |     |           |  Yes  |
+| View class roster        |         |     |           |  Yes  |
+| Add/remove students, TAs |         |     |           |  Yes  |
+| Sync CSV roster          |         |     |           |  Yes  |
+| Manage TAs on own room   |         |     |    Yes    | Yes¹  |
+
+¹ On the room they run. An admin is a TA in the other rooms on their classes, not their professor.
 
 ### Session Operations
 
-| Action               | Student | TA  |   Professor   |
-| -------------------- | :-----: | :-: | :-----------: |
-| Create session       |         |     |      Yes      |
-| Join via code        |   Yes   | Yes |      N/A      |
-| End session          |         |     | Yes (creator) |
-| Regenerate join code |         |     | Yes (creator) |
-| Upload slides        |         |     |      Yes      |
-| Control slide page   |         |     |      Yes      |
+| Action               | Student |  TA  |   Professor   |
+| -------------------- | :-----: | :--: | :-----------: |
+| Create session       |         |      |      Yes      |
+| Join via code        |   Yes   | Yes  |      N/A      |
+| End session          |         |      | Yes (creator) |
+| Regenerate join code |         |      | Yes (creator) |
+| Upload slides        |         |      |      Yes      |
+| Take slide control   |         | Yes  |      Yes      |
+| Move the shared deck |         | Yes¹ |     Yes¹      |
+| Browse slides freely |   Yes   | Yes  |      Yes      |
+
+¹ Only while holding control — one person at a time.
 
 ### Question Operations
 

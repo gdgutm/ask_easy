@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 
 import { prisma } from "@/lib/prisma";
 import { getSessionOptions, type SessionData } from "@/lib/session";
-import { getRoleFromWhitelist } from "@/lib/whitelist";
 
 // ---------------------------------------------------------------------------
 // GET /api/auth/session
@@ -67,34 +66,25 @@ export async function GET(request: NextRequest) {
   }
 
   // ------------------------------------------------------------------
-  // 2. Resolve role from the instructor whitelist.
-  //    PROFESSOR / TA → listed in PROFESSOR_WHITELIST
-  //    STUDENT       → everyone else (default)
-  //    In dev mode DEV_ROLE overrides the whitelist (for testing instructor UI).
-  // ------------------------------------------------------------------
-  const whitelistRole = getRoleFromWhitelist(utorid);
-  const role =
-    !isProd && process.env.DEV_ROLE
-      ? (process.env.DEV_ROLE as "STUDENT" | "TA" | "PROFESSOR")
-      : whitelistRole;
-
-  // ------------------------------------------------------------------
-  // 3. Upsert user in Postgres.
-  //    Role is re-evaluated on every login so whitelist changes take
-  //    effect immediately on the user's next sign-in.
+  // 2. Upsert user in Postgres.
+  //
+  //    Everyone signs in as STUDENT. There is no global professor role:
+  //    PROFESSOR and TA are granted per class by an admin, and live on
+  //    CourseEnrollment. User.role is therefore only ever STUDENT and is
+  //    kept solely as the default for new enrollment rows.
   // ------------------------------------------------------------------
   const user = await prisma.user.upsert({
     where: { utorid },
     update: {
       ...(name ? { name } : {}),
       ...(email ? { email } : {}),
-      role,
+      role: "STUDENT",
     },
     create: {
       utorid,
       name: name ?? utorid,
       email: email ?? `${utorid}@mail.utoronto.ca`,
-      role,
+      role: "STUDENT",
     },
   });
 

@@ -103,10 +103,28 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
         },
       });
 
-      // 10. Delete Courses
+      // 10. Delete Courses (rooms), then any classlist they emptied
       if (courseIds.length > 0) {
+        const affected = await tx.course.findMany({
+          where: { id: { in: courseIds }, classlistId: { not: null } },
+          select: { classlistId: true },
+          distinct: ["classlistId"],
+        });
+
         await tx.course.deleteMany({ where: { id: { in: courseIds } } });
+
+        for (const { classlistId } of affected) {
+          if (!classlistId) continue;
+          const remaining = await tx.course.count({ where: { classlistId } });
+          if (remaining === 0) {
+            await tx.classlist.delete({ where: { id: classlistId } });
+          }
+        }
       }
+
+      // A classlist this user created but whose rooms belong elsewhere would
+      // block the user delete on its RESTRICT foreign key.
+      await tx.classlist.deleteMany({ where: { createdById: userId, rooms: { none: {} } } });
 
       // 11. Finally, delete the User
       await tx.user.delete({ where: { id: userId } });

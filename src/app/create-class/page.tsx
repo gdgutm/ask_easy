@@ -11,6 +11,12 @@ import { ArrowLeft } from "lucide-react";
 import NoPermissions from "./components/NoPermissions";
 import Upload from "./components/Upload";
 import PreviewClass from "./components/PreviewClass";
+import {
+  emptyProfessorRow,
+  professorRowsMissingNames,
+  professorRowsToPayload,
+  type ProfessorRow,
+} from "./components/ProfessorList";
 import { parseAndProcessCSV } from "@/utils/create-class";
 import type { ProcessedClassData } from "@/utils/types";
 
@@ -19,8 +25,10 @@ export default function CreateClassPage() {
   const [file, setFile] = useState<File | null>(null);
   const [processedData, setProcessedData] = useState<ProcessedClassData | null>(null);
   const [tasInput, setTasInput] = useState("");
+  const [professorRows, setProfessorRows] = useState<ProfessorRow[]>([emptyProfessorRow()]);
   const [courseCodeInput, setCourseCodeInput] = useState("");
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -35,6 +43,7 @@ export default function CreateClassPage() {
             pfp: data.name?.[0]?.toUpperCase() ?? "?",
             role: data.role as User["role"],
           });
+          setIsAdmin(!!data.isAdmin);
         }
       })
       .catch(() => null);
@@ -56,6 +65,7 @@ export default function CreateClassPage() {
     setFile(null);
     setProcessedData(null);
     setTasInput("");
+    setProfessorRows([emptyProfessorRow()]);
     setCourseCodeInput("");
     setSubmitError(null);
   };
@@ -68,20 +78,29 @@ export default function CreateClassPage() {
       .split(/[\n,\s]+/)
       .map((s) => s.trim())
       .filter(Boolean);
+    const unnamed = professorRowsMissingNames(professorRows);
+    if (unnamed.length > 0) {
+      setSubmitError(`Give ${unnamed.join(", ")} a room name — it is what their room is called.`);
+      setSubmitting(false);
+      return;
+    }
+
+    const professors = professorRowsToPayload(professorRows);
 
     try {
-      const res = await fetch("/api/courses", {
+      const res = await fetch("/api/classlists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: courseCodeInput.trim() || processedData.courseCode,
           students: processedData.students,
           ...(tas.length > 0 ? { tas } : {}),
+          ...(professors.length > 0 ? { professors } : {}),
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setSubmitError(data.error ?? "Failed to create course.");
+        setSubmitError(data.error ?? "Failed to create the class.");
         return;
       }
       router.push("/");
@@ -101,7 +120,9 @@ export default function CreateClassPage() {
     );
   }
 
-  if (user.role !== "PROFESSOR") {
+  // Creating a class is an admin action — professors are assigned to a class,
+  // they do not make one.
+  if (!isAdmin) {
     return <NoPermissions user={user} />;
   }
 
@@ -128,10 +149,11 @@ export default function CreateClassPage() {
         <div className="max-w-3xl w-full bg-white p-6 sm:p-8 rounded-md border-2 border-stone-100 shadow-sm space-y-6 z-10 mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-stone-900 tracking-tight mb-2">
-              Create a Lecture
+              Create a Classlist
             </h1>
             <p className="text-lg text-stone-500">
-              Upload your student roster to create a new lecture.
+              Upload your student roster, then add the professors teaching it. Each one gets their
+              own room.
             </p>
           </div>
 
@@ -149,6 +171,8 @@ export default function CreateClassPage() {
               processedData={processedData}
               onClear={clearFile}
               onSubmit={submitting ? () => {} : submitClassCreation}
+              professorRows={professorRows}
+              onProfessorRowsChange={setProfessorRows}
               tasInput={tasInput}
               onTasChange={setTasInput}
               courseCodeInput={courseCodeInput}
@@ -156,7 +180,7 @@ export default function CreateClassPage() {
             />
           )}
 
-          {submitting && <p className="text-sm text-stone-500 text-center">Creating class…</p>}
+          {submitting && <p className="text-sm text-stone-500 text-center">Creating rooms…</p>}
         </div>
       </div>
       {footer()}

@@ -1,7 +1,7 @@
 /**
  * Stress Test Seed Script
  *
- * Creates 100 student users, 1 professor, 1 course, and 1 active session
+ * Creates 100 student users, 1 professor, 1 classlist with 1 room, and 1 active session
  * for stress testing. Run with: pnpm run stress:seed
  */
 import { PrismaClient, Role, SessionStatus } from "../src/generated/prisma";
@@ -35,6 +35,7 @@ async function seed() {
     where: { course: { code: "STRESS101" } },
   });
   await prisma.course.deleteMany({ where: { code: "STRESS101" } });
+  await prisma.classlist.deleteMany({ where: { code: "STRESS101" } });
   await prisma.user.deleteMany({
     where: {
       utorid: {
@@ -49,7 +50,9 @@ async function seed() {
       utorid: "stress_prof",
       email: "stress_prof@mail.utoronto.ca",
       name: "Stress Test Professor",
-      role: Role.PROFESSOR,
+      // Global roles are always STUDENT — being a professor is an enrollment.
+      role: Role.STUDENT,
+      hasLoggedIn: true,
     },
   });
 
@@ -68,13 +71,24 @@ async function seed() {
     orderBy: { utorid: "asc" },
   });
 
-  console.log("[stress-seed] Creating course STRESS101...");
+  console.log("[stress-seed] Creating classlist STRESS101 and its one room...");
+  const classlist = await prisma.classlist.create({
+    data: {
+      code: "STRESS101",
+      semester: "Winter 2026",
+      createdById: professor.id,
+    },
+  });
+
+  // One room, run by the one professor — the same shape the app creates.
   const course = await prisma.course.create({
     data: {
       code: "STRESS101",
-      name: "Stress Testing Course",
+      name: "STRESS101",
       semester: "Winter 2026",
       createdById: professor.id,
+      classlistId: classlist.id,
+      professorId: professor.id,
     },
   });
 

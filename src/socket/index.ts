@@ -17,7 +17,12 @@ import {
   handleAnswerUpvote,
   handleAnswerDelete,
 } from "./handlers/answerHandlers";
-import { handleSlideChange, handleSlideSync, handleSlidesUploaded } from "./handlers/slideHandlers";
+import {
+  handleSlideChange,
+  handleSlideControlTake,
+  handleSlideSync,
+  handleSlidesUploaded,
+} from "./handlers/slideHandlers";
 import { handleAnswerModeChange, handleAnswerModeSync } from "./handlers/sessionHandlers";
 import type {
   ClientToServerEvents,
@@ -128,10 +133,18 @@ export async function initSocketIO(
   // Connection handler
   // -----------------------------------------------------------------------
 
-  async function broadcastViewerCount(sessionId: string) {
+  /**
+   * The professor running the room is not one of its viewers. Roles are per
+   * course, so this reads the enrollment role recorded at session:join —
+   * the global cookie role is always STUDENT and would count everyone.
+   */
+  async function countViewers(sessionId: string): Promise<number> {
     const sockets = await io!.in(`session:${sessionId}`).fetchSockets();
-    const count = sockets.filter((s) => s.data.role !== "PROFESSOR").length;
-    io!.to(`session:${sessionId}`).emit("viewer:count", { count });
+    return sockets.filter((s) => s.data.currentSessionRole !== "PROFESSOR").length;
+  }
+
+  async function broadcastViewerCount(sessionId: string) {
+    io!.to(`session:${sessionId}`).emit("viewer:count", { count: await countViewers(sessionId) });
   }
 
   io.on("connection", (socket) => {
@@ -180,12 +193,18 @@ export async function initSocketIO(
         }
 
         if (socket.data.currentSessionId && socket.data.currentSessionId !== payload.sessionId) {
-          socket.leave(`session:${socket.data.currentSessionId}`);
-          await broadcastViewerCount(socket.data.currentSessionId);
+          const previous = socket.data.currentSessionId;
+          socket.leave(`session:${previous}`);
+          // The instructor room has to go too: a professor switching to a room
+          // where they are a student would otherwise keep receiving the old
+          // room's INSTRUCTOR_ONLY questions.
+          socket.leave(`session:${previous}:instructors`);
+          await broadcastViewerCount(previous);
         }
 
         socket.join(`session:${payload.sessionId}`);
         socket.data.currentSessionId = payload.sessionId;
+        socket.data.currentSessionRole = enrollment.role as SocketData["currentSessionRole"];
         console.log(`[Socket.IO] ${socket.id} joined session:${payload.sessionId}`);
 
         // Join the instructor room if the user is a TA or PROFESSOR in this course,
@@ -217,17 +236,17 @@ export async function initSocketIO(
         });
         if (!syncEnrollment) return;
 
-        const sockets = await io!.in(`session:${payload.sessionId}`).fetchSockets();
-        const count = sockets.filter((s) => s.data.role !== "PROFESSOR").length;
-        socket.emit("viewer:count", { count });
+        socket.emit("viewer:count", { count: await countViewers(payload.sessionId) });
       }
     });
 
     socket.on("session:leave", async (payload) => {
       if (payload?.sessionId && typeof payload.sessionId === "string") {
         socket.leave(`session:${payload.sessionId}`);
+        socket.leave(`session:${payload.sessionId}:instructors`);
         if (socket.data.currentSessionId === payload.sessionId) {
           socket.data.currentSessionId = undefined;
+          socket.data.currentSessionRole = undefined;
         }
         console.log(`[Socket.IO] ${socket.id} left session:${payload.sessionId}`);
 
@@ -245,6 +264,7 @@ export async function initSocketIO(
     handleAnswerUpvote(socket, io!);
     handleAnswerDelete(socket, io!);
     handleSlideChange(socket, io!);
+    handleSlideControlTake(socket, io!);
     handleSlideSync(socket);
     handleSlidesUploaded(socket, io!);
     handleAnswerModeChange(socket, io!);

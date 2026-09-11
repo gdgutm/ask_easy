@@ -8,7 +8,6 @@ const INJECTED_KEYS = [
   "DEV_UTORID",
   "DEV_NAME",
   "DEV_EMAIL",
-  "DEV_ROLE",
   "SESSION_COOKIE_NAME",
   "NEXT_DIST_DIR",
 ] as const;

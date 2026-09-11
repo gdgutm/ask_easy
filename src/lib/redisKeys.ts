@@ -102,6 +102,18 @@ export function slideState(sessionId: string): string {
 }
 
 /**
+ * Slide controller key — the userId currently allowed to move the shared deck.
+ * Exactly one person holds it at a time; taking control displaces whoever had
+ * it. Absent means nobody has claimed it yet and the room's professor holds it
+ * by default.
+ * Example: "slide-controller:{abc123}"
+ * TTL: 24 hours, alongside the slide position.
+ */
+export function slideController(sessionId: string): string {
+  return `slide-controller:{${sessionId}}`;
+}
+
+/**
  * Answer mode key — stores whether only instructors or everyone can answer questions.
  * Example: "answer-mode:{abc123}"
  * Value: "all" | "instructors_only"
