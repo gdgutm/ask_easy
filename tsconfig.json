@@ -40,7 +40,17 @@
     ".next-prof-2/types/**/*.ts",
     ".next-prof-2/dev/types/**/*.ts",
     ".next-prof-3/types/**/*.ts",
-    ".next-prof-3/dev/types/**/*.ts"
+    ".next-prof-3/dev/types/**/*.ts",
+    ".next-wlk-3105/types/**/*.ts",
+    ".next-wlk-3105/dev/types/**/*.ts",
+    ".next-wlk-3101/types/**/*.ts",
+    ".next-wlk-3101/dev/types/**/*.ts",
+    ".next-wlk-3102/types/**/*.ts",
+    ".next-wlk-3102/dev/types/**/*.ts",
+    ".next-wlk-3104/types/**/*.ts",
+    ".next-wlk-3104/dev/types/**/*.ts",
+    ".next-wlk-3103/types/**/*.ts",
+    ".next-wlk-3103/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", ".next", ".next-prof", ".next-ta", ".next-student"]
 }
