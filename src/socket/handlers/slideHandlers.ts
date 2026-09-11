@@ -4,7 +4,8 @@ import { redisCache } from "@/lib/redis";
 import { slideState } from "@/lib/redisKeys";
 import {
   requireSocketEnrollment,
-  requireSocketInstructor,
+  requireSocketProfessor,
+  requireSocketProfessorOrTA,
   NotEnrolledError,
   NotInstructorError,
   SessionNotFoundError,
@@ -37,13 +38,13 @@ interface SlideSyncPayload {
 /**
  * Registers the `slide:change` event listener on the given socket.
  *
- * Only professors (per-course CourseEnrollment) may change the shared slide
- * position for a session.
+ * The professor and the TAs of the room share one deck and may all drive it.
+ * Uploading it stays the professor's alone — see handleSlidesUploaded.
  *
  * Guard order (cheap-before-expensive):
  *   1. Auth          — socket.data.userId must exist
  *   2. Payload shape — sessionId must be a string, pageIndex a non-negative integer
- *   3. Enrollment    — user must be a PROFESSOR in the session's course (CourseEnrollment)
+ *   3. Enrollment    — user must be PROFESSOR or TA in the session's course
  *   4. Persist       — current page index written to Redis (24 h TTL)
  *   5. Broadcast     — emit slide:changed to session:{sessionId} (all participants)
  */
@@ -77,8 +78,8 @@ export function handleSlideChange(socket: Socket, io: Server): void {
         return;
       }
 
-      // 3. Enrollment + role check — only professors in this course may change slides
-      await requireSocketInstructor(userId, sessionId);
+      // 3. Enrollment + role check — the room's professor or one of its TAs
+      await requireSocketProfessorOrTA(userId, sessionId);
 
       // 4. Persist current page to Redis with a 24-hour TTL
       await redisCache.set(slideState(sessionId), pageIndex, "EX", SLIDE_STATE_TTL_SECONDS);
@@ -101,10 +102,10 @@ export function handleSlideChange(socket: Socket, io: Server): void {
           userId: socket.data?.userId,
           sessionId: payload?.sessionId,
           action: "slide:change",
-          reason: "not professor",
+          reason: "not professor or TA",
         });
         socket.emit("slide:error", {
-          message: "Only professors can change the shared slide position.",
+          message: "Only the professor and TAs can move the shared slides.",
         });
       } else {
         console.error("[SlideHandler] Failed to process slide:change:", error);
@@ -125,7 +126,7 @@ export function handleSlideChange(socket: Socket, io: Server): void {
  * Guard order:
  *   1. Auth          — socket.data.userId must exist
  *   2. Payload shape — sessionId and slideSetId must be strings
- *   3. Enrollment    — user must be a PROFESSOR in the session's course (CourseEnrollment)
+ *   3. Enrollment    — user must be the PROFESSOR of the session's room
  *   4. Broadcast     — emit slides:available to session:{sessionId}
  */
 export function handleSlidesUploaded(socket: Socket, io: Server): void {
@@ -156,8 +157,8 @@ export function handleSlidesUploaded(socket: Socket, io: Server): void {
         return;
       }
 
-      // 3. Enrollment + role check — only professors in this course
-      await requireSocketInstructor(userId, sessionId);
+      // 3. Enrollment + role check — uploading is the professor's alone
+      await requireSocketProfessor(userId, sessionId);
 
       // 4. Broadcast to all participants in the session room
       io.to(`session:${sessionId}`).emit("slides:available", { slideSetId });
@@ -193,8 +194,9 @@ export function handleSlidesUploaded(socket: Socket, io: Server): void {
 /**
  * Registers the `slide:sync` event listener on the given socket.
  *
- * Returns the professor's last known page index for the session so that
- * late joiners or reconnecting clients can jump to the correct slide.
+ * Returns the room's last known page index — set by whichever of the
+ * professor or TAs last moved the deck — so that late joiners and reconnecting
+ * clients land on the page everyone else is on.
  *
  * Guard order:
  *   1. Auth          — socket.data.userId must exist

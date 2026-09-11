@@ -4,7 +4,7 @@ import { redisCache } from "@/lib/redis";
 import { answerMode as answerModeKey } from "@/lib/redisKeys";
 import {
   requireSocketEnrollment,
-  requireSocketInstructor,
+  requireSocketProfessor,
   NotEnrolledError,
   NotInstructorError,
   SessionNotFoundError,
@@ -64,8 +64,8 @@ export function handleAnswerModeChange(socket: Socket, io: Server): void {
       if (!sessionId || typeof sessionId !== "string") return;
       if (mode !== "all" && mode !== "instructors_only") return;
 
-      // 3. Enrollment + role check — only professors in this course
-      await requireSocketInstructor(userId, sessionId);
+      // 3. Enrollment + role check — only this room's professor
+      await requireSocketProfessor(userId, sessionId);
 
       // 4. Persist to Redis
       await redisCache.set(answerModeKey(sessionId), mode, "EX", ANSWER_MODE_TTL_SECONDS);

@@ -151,7 +151,7 @@ one to enter a colleague's room on the same class.
 
 - **PDF only** — validated by MIME type, magic bytes, and parseability
 - **Size limits** — 1 KB to 50 MB
-- Professor-only; session must be ACTIVE
+- Professor-only (a TA can drive the deck but never replace it); session must be ACTIVE
 
 ### Viewing
 
@@ -160,9 +160,21 @@ one to enter a colleague's room on the same class.
 
 ### Real-Time Sync
 
-- Professor changes the page index; broadcast to all participants via `slide:changed`
-- Late joiners call `slide:sync` to get the current page
+- The professor **and the room's TAs** share one deck and may all drive it; a page change is broadcast to every participant via `slide:changed`. Uploading it stays the professor's alone
+- Late joiners call `slide:sync` to get the current page — wherever the last person to present left it
 - New upload triggers `slides:available` notification to the room
+
+### Viewer modes
+
+Every participant is in one of these at any moment:
+
+| Mode           | Who            | What it does                                                                                                 |
+| -------------- | -------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Following**  | everyone       | Tracks the shared page. The default for students and TAs                                                     |
+| **Browsing**   | everyone       | Move around privately; the room is unaffected. Entered by navigating while following, or via _Browse Freely_ |
+| **Presenting** | professor, TAs | Moving the page moves it for the whole room. The professor's default                                         |
+
+_Present_ takes the deck and pulls the room to the presenter's current page, so nobody has to guess where it went. More than one instructor may present at once: a change from another presenter is accepted rather than fought over, so they converge instead of drifting apart.
 
 ### Split View
 
@@ -249,7 +261,8 @@ If Redis is unavailable, rate limiting fails closed (blocks all requests).
 | End session          |         |     | Yes (creator) |
 | Regenerate join code |         |     | Yes (creator) |
 | Upload slides        |         |     |      Yes      |
-| Control slide page   |         |     |      Yes      |
+| Control slide page   |         | Yes |      Yes      |
+| Browse slides freely |   Yes   | Yes |      Yes      |
 
 ### Question Operations
 

@@ -120,12 +120,15 @@ export async function requireSocketEnrollment(
 }
 
 /**
- * Requires that the user is a PROFESSOR in the session's course.
+ * Requires that the user is the PROFESSOR of the session's room.
  * Throws `SessionNotFoundError`, `NotEnrolledError`, or `NotInstructorError`.
+ *
+ * For things only the room's owner may do: uploading slides, ending the
+ * lecture, changing who is allowed to answer.
  *
  * @returns The session's courseId
  */
-export async function requireSocketInstructor(
+export async function requireSocketProfessor(
   userId: string,
   sessionId: string
 ): Promise<{ courseId: string }> {
@@ -136,6 +139,31 @@ export async function requireSocketInstructor(
   }
 
   return { courseId };
+}
+
+/**
+ * Requires that the user is the PROFESSOR or a TA of the session's room —
+ * the people who run the lecture, which is also who the `:instructors` socket
+ * room contains.
+ *
+ * For things the teaching team shares: driving the slide deck everyone sees.
+ * Note this is deliberately not the same as `requireSocketProfessor`; the two
+ * are named apart because reading "instructor" as either one has been a
+ * reliable way to widen access by accident.
+ *
+ * @returns The session's courseId and the caller's role
+ */
+export async function requireSocketProfessorOrTA(
+  userId: string,
+  sessionId: string
+): Promise<{ courseId: string; role: Role }> {
+  const { role, courseId } = await requireSocketEnrollment(userId, sessionId);
+
+  if (role !== "PROFESSOR" && role !== "TA") {
+    throw new NotInstructorError(userId, sessionId, role);
+  }
+
+  return { courseId, role };
 }
 
 // ---------------------------------------------------------------------------

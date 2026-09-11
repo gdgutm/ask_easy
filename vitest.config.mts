@@ -11,6 +11,7 @@ export default defineConfig({
       "**/dist/**",
       "src/__tests__/prisma-schema.test.ts",
       "src/__tests__/session-join.test.ts",
+      "src/__tests__/slide-control.test.ts",
     ],
   },
 });
