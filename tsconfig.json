@@ -52,7 +52,11 @@
     ".next-wlk-3103/types/**/*.ts",
     ".next-wlk-3103/dev/types/**/*.ts",
     ".next-wlk-3100/types/**/*.ts",
-    ".next-wlk-3100/dev/types/**/*.ts"
+    ".next-wlk-3100/dev/types/**/*.ts",
+    ".next-student-1/types/**/*.ts",
+    ".next-student-1/dev/types/**/*.ts",
+    ".next-student-2/types/**/*.ts",
+    ".next-student-2/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", ".next", ".next-prof", ".next-ta", ".next-student"]
 }

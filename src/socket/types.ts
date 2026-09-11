@@ -191,6 +191,19 @@ export interface SlideSyncPayload {
 
 export interface SlideSyncResponsePayload {
   pageIndex: number;
+  /** Who currently holds the deck, so a late joiner renders the right toolbar. */
+  controllerId: string | null;
+}
+
+export interface SlideControlTakePayload {
+  sessionId: string;
+  /** Page to pull the room to, so a takeover lands where the taker is looking. */
+  pageIndex?: number;
+}
+
+export interface SlideControlChangedPayload {
+  controllerId: string;
+  controllerName: string;
 }
 
 export interface SlidesUploadedPayload {
@@ -223,6 +236,7 @@ export interface ClientToServerEvents {
   "question:delete": (payload: QuestionDeletePayload) => void;
   "answer:delete": (payload: AnswerDeletePayload) => void;
   "slide:change": (payload: SlideChangePayload) => void;
+  "slide:control:take": (payload: SlideControlTakePayload) => void;
   "slide:sync": (payload: SlideSyncPayload) => void;
   "slides:uploaded": (payload: SlidesUploadedPayload) => void;
   "answer-mode:change": (payload: AnswerModeChangePayload) => void;
@@ -247,6 +261,7 @@ export interface ServerToClientEvents {
   "question:deleted": (payload: QuestionDeletedPayload) => void;
   "answer:deleted": (payload: AnswerDeletedPayload) => void;
   "slide:changed": (payload: SlideChangedPayload) => void;
+  "slide:control:changed": (payload: SlideControlChangedPayload) => void;
   "slide:sync": (payload: SlideSyncResponsePayload) => void;
   "slide:error": (payload: { message: string }) => void;
   "slides:available": (payload: SlidesAvailablePayload) => void;

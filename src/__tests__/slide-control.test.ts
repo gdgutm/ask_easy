@@ -9,6 +9,8 @@ import {
   NotInstructorError,
   SessionNotFoundError,
 } from "@/lib/sessionService";
+import { releaseSlideControl, resolveSlideController, takeSlideControl } from "@/lib/slideControl";
+import { redisCache } from "@/lib/redis";
 
 const prisma = new PrismaClient();
 
@@ -18,6 +20,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.$disconnect();
+  redisCache.disconnect();
 });
 
 beforeEach(async () => {
@@ -164,5 +167,60 @@ describe("Slide control authorization", () => {
         NotInstructorError
       );
     });
+  });
+});
+
+// =============================================================================
+// Who is holding the deck
+// =============================================================================
+describe("Slide control holder", () => {
+  beforeEach(async () => {
+    await releaseSlideControl("sld-session");
+  });
+
+  it("belongs to the room's professor while unclaimed", async () => {
+    const { professor, room } = await buildRoom();
+    await releaseSlideControl("unclaimed");
+    await expect(resolveSlideController("unclaimed", room.id)).resolves.toBe(professor.id);
+  });
+
+  it("moves to whoever takes it", async () => {
+    const { ta, room, session } = await buildRoom();
+    await takeSlideControl(session.id, ta.id);
+    await expect(resolveSlideController(session.id, room.id)).resolves.toBe(ta.id);
+    await releaseSlideControl(session.id);
+  });
+
+  it("displaces the previous holder rather than queueing", async () => {
+    const { professor, ta, room, session } = await buildRoom();
+
+    await takeSlideControl(session.id, ta.id);
+    await expect(resolveSlideController(session.id, room.id)).resolves.toBe(ta.id);
+
+    // The professor takes it straight back — no release step in between.
+    await takeSlideControl(session.id, professor.id);
+    await expect(resolveSlideController(session.id, room.id)).resolves.toBe(professor.id);
+    await releaseSlideControl(session.id);
+  });
+
+  it("falls back to the professor again once released", async () => {
+    const { professor, ta, room, session } = await buildRoom();
+    await takeSlideControl(session.id, ta.id);
+    await releaseSlideControl(session.id);
+    await expect(resolveSlideController(session.id, room.id)).resolves.toBe(professor.id);
+  });
+
+  it("has no holder for a room with no professor", async () => {
+    const { professor } = await buildRoom();
+    const orphan = await prisma.course.create({
+      data: {
+        code: "SLD999",
+        name: "Legacy",
+        semester: "Fall 2026",
+        createdById: professor.id,
+      },
+    });
+    await releaseSlideControl("orphan-session");
+    await expect(resolveSlideController("orphan-session", orphan.id)).resolves.toBeNull();
   });
 });

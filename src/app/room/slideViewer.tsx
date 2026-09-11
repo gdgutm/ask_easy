@@ -47,15 +47,14 @@ interface SlideViewerProps {
 /**
  * How this viewer relates to the deck everyone else is looking at.
  *
- * following  — track the shared page; what students do by default
- * browsing   — move around privately, shared page untouched
- * presenting — moving the page moves it for the whole room
+ * following — track the shared page
+ * browsing  — move around privately, shared page untouched
  *
- * Students only ever follow or browse. The professor and TAs can do all three,
- * and more than one of them may present: a change from another presenter is
- * accepted rather than fought over, so they converge instead of diverging.
+ * This is everyone's relationship to the deck *except* whoever is driving it.
+ * Exactly one person holds control at a time; for them the page they are on is
+ * the shared page, so neither mode applies and the toolbar is different.
  */
-type SlideMode = "following" | "browsing" | "presenting";
+type SlideMode = "following" | "browsing";
 
 interface SlideUIProps {
   activeDocumentId: string | null;
@@ -76,20 +75,25 @@ function SlideUI({
   onReplaceSlides,
   onEndLecture,
 }: SlideUIProps) {
-  const { socket, sessionId, role, slideReturnTarget, goBackToPreviousSlide } = useRoom();
+  const { socket, sessionId, userId, role, slideReturnTarget, goBackToPreviousSlide } = useRoom();
   const router = useRouter();
 
-  // The professor and the TAs drive one shared deck between them. Uploading it
-  // is still the professor's alone.
-  const canPresent = role === "PROFESSOR" || role === "TA";
+  // The professor and the TAs may take the deck. Uploading it stays the
+  // professor's alone.
+  const canTakeControl = role === "PROFESSOR" || role === "TA";
 
   const [pageIndex, setPageIndex] = useState(0);
   const [inputValue, setInputValue] = useState("1");
-  // The professor arrives presenting; everyone else arrives following them.
-  const [mode, setMode] = useState<SlideMode>(isProfessor ? "presenting" : "following");
+  const [mode, setMode] = useState<SlideMode>("following");
   const [viewerCount, setViewerCount] = useState(0);
-  // Where the deck is for the room — whoever last moved it, not just the professor.
+  // Who is driving. Optimistic on the professor so their toolbar is right on
+  // the first frame; slide:sync confirms or corrects it a moment later.
+  const [controllerId, setControllerId] = useState<string | null>(isProfessor ? userId : null);
+  const [controllerName, setControllerName] = useState<string>("");
+  // Where the deck is for the room — whoever last moved it.
   const sharedPageRef = useRef(0);
+
+  const isControlling = !!controllerId && controllerId === userId;
   // Each navigateToQuestionSlide call creates a new target object; apply once per object
   // so re-runs (e.g. isSynced → navigateToLocal identity) don't re-detach from live.
   const appliedNavTargetRef = useRef<SlideContextSnapshot | null>(null);
@@ -122,8 +126,15 @@ function SlideUI({
     if (socket.connected) requestSync();
     socket.on("connect", requestSync);
 
-    const onSyncResponse = ({ pageIndex: idx }: { pageIndex: number }) => {
+    const onSyncResponse = ({
+      pageIndex: idx,
+      controllerId: holder,
+    }: {
+      pageIndex: number;
+      controllerId: string | null;
+    }) => {
       sharedPageRef.current = idx;
+      setControllerId(holder ?? null);
       setPageIndex(idx);
       setInputValue(String(idx + 1));
     };
@@ -156,9 +167,9 @@ function SlideUI({
 
     const handler = ({ pageIndex: newIndex }: { pageIndex: number }) => {
       sharedPageRef.current = newIndex;
-      // Browsing is the only mode that ignores the room. A presenter follows
-      // another presenter's move so two of them cannot drift apart.
-      if (mode !== "browsing") {
+      // Browsing privately is the only reason to ignore the room. The person
+      // driving is the one who sent this, so following it is a no-op for them.
+      if (mode !== "browsing" || isControlling) {
         setPageIndex(newIndex);
         setInputValue(String(newIndex + 1));
       }
@@ -170,7 +181,31 @@ function SlideUI({
     return () => {
       socket.off("slide:changed", handler);
     };
-  }, [socket, mode]);
+  }, [socket, mode, isControlling]);
+
+  // Control changing hands. Losing it drops this viewer back to following the
+  // new holder — the toolbar becomes the same one a student sees, plus the
+  // button to take it back.
+  useEffect(() => {
+    if (!socket) return;
+
+    const onControlChanged = ({
+      controllerId: holder,
+      controllerName: name,
+    }: {
+      controllerId: string;
+      controllerName: string;
+    }) => {
+      setControllerId(holder);
+      setControllerName(name);
+      if (holder !== userId) setMode("following");
+    };
+
+    socket.on("slide:control:changed", onControlChanged);
+    return () => {
+      socket.off("slide:control:changed", onControlChanged);
+    };
+  }, [socket, userId]);
 
   // -------------------------------------------------------------------------
   // Navigation helpers
@@ -182,13 +217,13 @@ function SlideUI({
       const clamped = Math.max(0, Math.min(newIndex, pageCount - 1));
       // Moving while following means you wanted to look elsewhere — stop
       // following. A presenter is moving the room, so they stay put.
-      if (options?.detachFromShared && mode === "following") {
+      if (options?.detachFromShared && mode === "following" && !isControlling) {
         setMode("browsing");
       }
       setPageIndex(clamped);
       setInputValue(String(clamped + 1));
     },
-    [pageCount, mode]
+    [pageCount, mode, isControlling]
   );
 
   const navigateTo = useCallback(
@@ -197,15 +232,15 @@ function SlideUI({
       const clamped = Math.max(0, Math.min(newIndex, pageCount - 1));
       navigateToLocal(clamped, { detachFromShared: true });
 
-      if (mode === "presenting" && socket) {
+      if (isControlling && socket) {
         socket.emit("slide:change", { sessionId, pageIndex: clamped });
       }
     },
-    [pageCount, navigateToLocal, mode, socket, sessionId]
+    [pageCount, navigateToLocal, isControlling, socket, sessionId]
   );
 
-  // Question-badge jump: a presenter takes the room with them; everyone else
-  // detaches and looks on their own.
+  // Question-badge jump: the person driving takes the room with them; everyone
+  // else detaches and looks on their own.
   useEffect(() => {
     if (slideNavTarget?.slidePageIndex == null || !slideNavTarget.slideSetId) return;
     if (slideNavTarget.slideSetId !== slideSetId) return;
@@ -215,13 +250,13 @@ function SlideUI({
     appliedNavTargetRef.current = slideNavTarget;
     const targetPage = slideNavTarget.slidePageIndex;
     queueMicrotask(() => {
-      if (mode === "presenting") {
+      if (isControlling) {
         navigateTo(targetPage);
       } else {
         navigateToLocal(targetPage, { detachFromShared: true });
       }
     });
-  }, [slideNavTarget, slideSetId, pageCount, navigateToLocal, navigateTo, mode]);
+  }, [slideNavTarget, slideSetId, pageCount, navigateToLocal, navigateTo, isControlling]);
 
   const handleInputCommit = (value: string) => {
     const num = parseInt(value, 10);
@@ -254,12 +289,14 @@ function SlideUI({
   const handleBrowseFreely = () => setMode("browsing");
 
   /**
-   * Take the deck. The room is moved to this viewer's current page straight
-   * away so nobody has to guess where the new presenter is.
+   * Take the deck from whoever has it. The room comes to this viewer's current
+   * page, so taking control while browsing ahead brings everyone with you.
+   * The server answers with slide:control:changed, which is what actually
+   * flips this toolbar — and the previous holder's back to following.
    */
-  const handlePresent = () => {
-    setMode("presenting");
-    if (socket) socket.emit("slide:change", { sessionId, pageIndex });
+  const handleTakeControl = () => {
+    if (!socket) return;
+    socket.emit("slide:control:take", { sessionId, pageIndex });
   };
 
   // -------------------------------------------------------------------------
@@ -343,64 +380,21 @@ function SlideUI({
             </>
           )}
 
-          {/* Professor / TA: shared-deck controls */}
-          {canPresent && (
+          {/* Driving the deck — exactly one person at a time, professor or TA.
+              Everything below this block is the same bar everyone else sees. */}
+          {isControlling && (
             <>
-              {mode === "presenting" && (
-                <div className="flex items-center gap-1.5 h-9 px-3 bg-green-100 text-green-700 rounded-md text-sm font-medium">
-                  <Radio className="w-4 h-4" />
-                  Presenting
-                </div>
-              )}
-              {mode === "following" && (
-                <div className="flex items-center gap-1.5 h-9 px-3 bg-stone-100 text-stone-600 rounded-md text-sm font-medium">
-                  <Navigation className="w-4 h-4" />
-                  Following
-                </div>
-              )}
-              {mode === "browsing" && (
-                <div className="flex items-center gap-1.5 h-9 px-3 bg-stone-100 text-stone-600 rounded-md text-sm font-medium">
-                  <Unlink className="w-4 h-4" />
-                  Browsing
-                </div>
-              )}
-
+              <div className="flex items-center gap-1.5 h-9 px-3 bg-green-100 text-green-700 rounded-md text-sm font-medium">
+                <Radio className="w-4 h-4" />
+                Controlling
+              </div>
               <div className="flex items-center gap-1.5 h-9 px-3 bg-stone-100 text-stone-700 rounded-md text-sm font-medium">
                 <Users className="w-4 h-4" />
                 {viewerCount}
               </div>
 
-              {mode !== "presenting" && (
-                <button
-                  onClick={handlePresent}
-                  title="Move the slides for everyone in the room"
-                  className="flex shrink-0 items-center gap-1.5 h-9 px-3 bg-green-100 hover:bg-green-200 text-green-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
-                >
-                  <Radio className="w-3.5 h-3.5" />
-                  Present
-                </button>
-              )}
-              {mode === "presenting" && (
-                <button
-                  onClick={handleFollow}
-                  title="Stop moving the slides for everyone"
-                  className="flex shrink-0 items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
-                >
-                  <Unlink className="w-3.5 h-3.5" />
-                  Stop
-                </button>
-              )}
-              {mode === "browsing" && (
-                <button
-                  onClick={handleFollow}
-                  className="flex shrink-0 items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
-                >
-                  <Navigation className="w-3.5 h-3.5" />
-                  Follow
-                </button>
-              )}
-
-              {/* Uploading the deck stays the professor's — a TA never gets this. */}
+              {/* Replacing the deck is the professor's alone — a TA driving it
+                  never gets this button. */}
               {onReplaceSlides && (
                 <>
                   <input
@@ -465,72 +459,89 @@ function SlideUI({
             </>
           )}
 
-          {/* Student: following mode */}
-          {!canPresent && mode === "following" && (
+          {/* Not driving: the student bar. A professor who has been taken over
+              lands here too, with the same button back. */}
+          {!isControlling && (
             <>
-              <div className="flex items-center gap-1.5 h-9 px-3 bg-green-100 text-green-700 rounded-md text-sm font-medium">
-                <Navigation className="w-4 h-4" />
-                Following Live
-              </div>
-              <button
-                onClick={handleBrowseFreely}
-                className="flex items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
-              >
-                <Unlink className="w-3.5 h-3.5" />
-                Browse Freely
-              </button>
-              <div className="w-px h-6 bg-stone-200 mx-1" />
-              <button
-                onClick={() => router.push("/")}
-                className="flex items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-red-100 hover:text-red-700 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                Exit
-              </button>
-            </>
-          )}
+              {mode === "following" ? (
+                <>
+                  <div className="flex items-center gap-1.5 h-9 px-3 bg-green-100 text-green-700 rounded-md text-sm font-medium">
+                    <Navigation className="w-4 h-4" />
+                    {controllerName ? `Following ${controllerName}` : "Following Live"}
+                  </div>
+                  <button
+                    onClick={handleBrowseFreely}
+                    className="flex shrink-0 items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
+                  >
+                    <Unlink className="w-3.5 h-3.5" />
+                    Browse Freely
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 rounded-md transition-colors cursor-pointer"
+                    onClick={() => navigateTo(pageIndex === 0 ? pageCount - 1 : pageIndex - 1)}
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onBlur={() => handleInputCommit(inputValue)}
+                      onKeyDown={handleKeyDown}
+                      className="w-10 h-9 px-1 text-center bg-white border border-stone-300 rounded focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
+                    />
+                    {pageCount > 0 && <span className="text-stone-500">/ {pageCount}</span>}
+                  </div>
+                  <button
+                    className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 rounded-md transition-colors cursor-pointer"
+                    onClick={() => navigateTo((pageIndex + 1) % pageCount)}
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleFollow}
+                    className="flex shrink-0 items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
+                  >
+                    <Radio className="w-4 h-4" />
+                    Back to Live
+                  </button>
+                </>
+              )}
 
-          {/* Student: free navigation mode */}
-          {!canPresent && mode !== "following" && (
-            <>
-              <button
-                className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 rounded-md transition-colors cursor-pointer"
-                onClick={() => navigateTo(pageIndex === 0 ? pageCount - 1 : pageIndex - 1)}
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onBlur={() => handleInputCommit(inputValue)}
-                  onKeyDown={handleKeyDown}
-                  className="w-10 h-9 px-1 text-center bg-white border border-stone-300 rounded focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
-                />
-                {pageCount > 0 && <span className="text-stone-500">/ {pageCount}</span>}
-              </div>
-              <button
-                className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 rounded-md transition-colors cursor-pointer"
-                onClick={() => navigateTo((pageIndex + 1) % pageCount)}
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-              <button
-                onClick={handleFollow}
-                className="flex items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
-              >
-                <Radio className="w-4 h-4" />
-                Back to Live
-              </button>
+              {/* The one addition for staff — students never see it. */}
+              {canTakeControl && (
+                <button
+                  onClick={handleTakeControl}
+                  title="Move the slides for everyone in the room"
+                  className="flex shrink-0 items-center gap-1.5 h-9 px-3 bg-green-100 hover:bg-green-200 text-green-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
+                >
+                  <SquareMousePointer className="w-3.5 h-3.5" />
+                  Control Slides
+                </button>
+              )}
+
               <div className="w-px h-6 bg-stone-200 mx-1" />
-              <button
-                onClick={() => router.push("/")}
-                className="flex items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-red-100 hover:text-red-700 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                Exit
-              </button>
+              {isProfessor ? (
+                <button
+                  onClick={handleEndLecture}
+                  className="flex items-center gap-1.5 h-9 px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  End Lecture
+                </button>
+              ) : (
+                <button
+                  onClick={() => router.push("/")}
+                  className="flex items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-red-100 hover:text-red-700 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Exit
+                </button>
+              )}
             </>
           )}
         </div>

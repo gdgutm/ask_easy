@@ -17,7 +17,12 @@ import {
   handleAnswerUpvote,
   handleAnswerDelete,
 } from "./handlers/answerHandlers";
-import { handleSlideChange, handleSlideSync, handleSlidesUploaded } from "./handlers/slideHandlers";
+import {
+  handleSlideChange,
+  handleSlideControlTake,
+  handleSlideSync,
+  handleSlidesUploaded,
+} from "./handlers/slideHandlers";
 import { handleAnswerModeChange, handleAnswerModeSync } from "./handlers/sessionHandlers";
 import type {
   ClientToServerEvents,
@@ -259,6 +264,7 @@ export async function initSocketIO(
     handleAnswerUpvote(socket, io!);
     handleAnswerDelete(socket, io!);
     handleSlideChange(socket, io!);
+    handleSlideControlTake(socket, io!);
     handleSlideSync(socket);
     handleSlidesUploaded(socket, io!);
     handleAnswerModeChange(socket, io!);

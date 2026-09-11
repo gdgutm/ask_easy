@@ -1,5 +1,8 @@
 import type { Role } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
+import { redisCache } from "@/lib/redis";
+import { answerMode, slideState } from "@/lib/redisKeys";
+import { releaseSlideControl } from "@/lib/slideControl";
 import { generateUniqueSessionCode } from "@/lib/sessionCode";
 import { deleteFile } from "@/lib/storage";
 import { getIO } from "@/socket";
@@ -383,6 +386,19 @@ export async function performSessionEnd(sessionId: string): Promise<void> {
     io.to(`session:${sessionId}`).emit("session:ended", {});
   } catch {
     // Socket.IO not initialised in test environments — safe to ignore
+  }
+
+  // Ephemeral room state. Keys are scoped by session id so a stale one could
+  // never reach a new session, but a ended lecture has no business holding a
+  // slide position or a controller for another 24 hours.
+  try {
+    await Promise.all([
+      releaseSlideControl(sessionId),
+      redisCache.del(slideState(sessionId)),
+      redisCache.del(answerMode(sessionId)),
+    ]);
+  } catch (err) {
+    console.error("[SessionService] Failed to clean up Redis state for session:", sessionId, err);
   }
 
   try {

@@ -160,21 +160,25 @@ one to enter a colleague's room on the same class.
 
 ### Real-Time Sync
 
-- The professor **and the room's TAs** share one deck and may all drive it; a page change is broadcast to every participant via `slide:changed`. Uploading it stays the professor's alone
-- Late joiners call `slide:sync` to get the current page — wherever the last person to present left it
+- **One person drives at a time.** The room's professor and its TAs may each take the deck; taking it displaces whoever had it. Uploading stays the professor's alone
+- The holder's page changes are broadcast to every participant via `slide:changed`; `slide:change` from anyone who is not currently holding the deck is refused
+- Control is held in Redis (`slide-controller:{sessionId}`, 24 h) and is **unclaimed by default** — until someone presses the button it belongs to the room's professor, so starting a lecture needs no extra step
+- `slide:control:take` claims it and pulls the room to the taker's current page, so taking over while reading ahead brings everyone along. `slide:control:changed` tells the room who is driving, which is what returns the displaced holder's toolbar to the following view
+- Late joiners call `slide:sync` and get both the current page and the current holder
 - New upload triggers `slides:available` notification to the room
+- Ending a lecture clears the slide position, the controller and the answer mode
 
-### Viewer modes
+### Viewer toolbar
 
-Every participant is in one of these at any moment:
+| Who                              | What they see                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Holding the deck**             | Controlling badge, viewer count, page controls — plus Replace and End Lecture if they are the professor |
+| **Professor or TA, not holding** | Exactly the student bar, plus a **Control Slides** button                                               |
+| **Student**                      | Following Live / Browse Freely, page controls when browsing                                             |
 
-| Mode           | Who            | What it does                                                                                                 |
-| -------------- | -------------- | ------------------------------------------------------------------------------------------------------------ |
-| **Following**  | everyone       | Tracks the shared page. The default for students and TAs                                                     |
-| **Browsing**   | everyone       | Move around privately; the room is unaffected. Entered by navigating while following, or via _Browse Freely_ |
-| **Presenting** | professor, TAs | Moving the page moves it for the whole room. The professor's default                                         |
-
-_Present_ takes the deck and pulls the room to the presenter's current page, so nobody has to guess where it went. More than one instructor may present at once: a change from another presenter is accepted rather than fought over, so they converge instead of drifting apart.
+A professor who has been taken over lands on the same bar a TA sees, with the
+same button back — so control can pass back and forth without anyone needing to
+release it first.
 
 ### Split View
 
@@ -254,15 +258,18 @@ If Redis is unavailable, rate limiting fails closed (blocks all requests).
 
 ### Session Operations
 
-| Action               | Student | TA  |   Professor   |
-| -------------------- | :-----: | :-: | :-----------: |
-| Create session       |         |     |      Yes      |
-| Join via code        |   Yes   | Yes |      N/A      |
-| End session          |         |     | Yes (creator) |
-| Regenerate join code |         |     | Yes (creator) |
-| Upload slides        |         |     |      Yes      |
-| Control slide page   |         | Yes |      Yes      |
-| Browse slides freely |   Yes   | Yes |      Yes      |
+| Action               | Student |  TA  |   Professor   |
+| -------------------- | :-----: | :--: | :-----------: |
+| Create session       |         |      |      Yes      |
+| Join via code        |   Yes   | Yes  |      N/A      |
+| End session          |         |      | Yes (creator) |
+| Regenerate join code |         |      | Yes (creator) |
+| Upload slides        |         |      |      Yes      |
+| Take slide control   |         | Yes  |      Yes      |
+| Move the shared deck |         | Yes¹ |     Yes¹      |
+| Browse slides freely |   Yes   | Yes  |      Yes      |
+
+¹ Only while holding control — one person at a time.
 
 ### Question Operations
 
