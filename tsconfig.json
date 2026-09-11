@@ -40,7 +40,13 @@
     ".next-probe-a/types/**/*.ts",
     ".next-probe-a/dev/types/**/*.ts",
     ".next-probe-s/types/**/*.ts",
-    ".next-probe-s/dev/types/**/*.ts"
+    ".next-probe-s/dev/types/**/*.ts",
+    ".next-prof-1/types/**/*.ts",
+    ".next-prof-1/dev/types/**/*.ts",
+    ".next-prof-2/types/**/*.ts",
+    ".next-prof-2/dev/types/**/*.ts",
+    ".next-prof-3/types/**/*.ts",
+    ".next-prof-3/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", ".next", ".next-prof", ".next-ta", ".next-student"]
 }

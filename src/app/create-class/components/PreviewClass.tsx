@@ -1,7 +1,13 @@
-import { CheckCircle2, File as FileIcon, X } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { CheckCircle2, ChevronLeft, ChevronRight, File as FileIcon, X } from "lucide-react";
 import { ProcessedClassData } from "@/utils/types";
 
 import ProfessorList, { type ProfessorRow } from "./ProfessorList";
+
+/** Rows per page in the roster preview. Keeps the card a predictable height. */
+const STUDENTS_PER_PAGE = 4;
 
 interface PreviewClassProps {
   file: File;
@@ -28,6 +34,18 @@ export default function PreviewClass({
   courseCodeInput,
   onCourseCodeChange,
 }: PreviewClassProps) {
+  const [page, setPage] = useState(0);
+
+  const students = processedData?.students ?? [];
+  const pageCount = Math.max(1, Math.ceil(students.length / STUDENTS_PER_PAGE));
+  // Clamp rather than reset in an effect — a newly parsed, shorter roster can
+  // leave the page index past the end.
+  const currentPage = Math.min(page, pageCount - 1);
+  const firstIndex = currentPage * STUDENTS_PER_PAGE;
+  const visible = students.slice(firstIndex, firstIndex + STUDENTS_PER_PAGE);
+  // Hold the table's height steady so the page doesn't jump on a short last page.
+  const filler = STUDENTS_PER_PAGE - visible.length;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       <div className="bg-stone-50 border-2 border-stone-100 rounded-md p-6 relative">
@@ -89,8 +107,8 @@ export default function PreviewClass({
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-200">
-                {processedData.students.slice(0, 4).map((student, idx) => (
-                  <tr key={idx} className="hover:bg-stone-50 transition-colors">
+                {visible.map((student, i) => (
+                  <tr key={firstIndex + i} className="hover:bg-stone-50 transition-colors">
                     <td className="px-6 py-3.5 text-stone-700 font-medium">{student.givenName}</td>
                     <td className="px-6 py-3.5 text-stone-700 font-medium">{student.surname}</td>
                     <td className="px-6 py-3.5 text-stone-500 font-mono text-xs">
@@ -98,14 +116,47 @@ export default function PreviewClass({
                     </td>
                   </tr>
                 ))}
+                {Array.from({ length: filler }, (_, i) => (
+                  <tr key={`filler-${i}`} aria-hidden="true">
+                    <td className="px-6 py-3.5" colSpan={3}>
+                      &nbsp;
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
+
+            {students.length > STUDENTS_PER_PAGE && (
+              <div className="flex items-center justify-between gap-3 px-6 py-3 bg-stone-50 border-t border-stone-200">
+                <p className="text-xs text-stone-500 font-medium tracking-wide">
+                  {firstIndex + 1}&ndash;{firstIndex + visible.length} of {students.length} students
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPage(currentPage - 1)}
+                    disabled={currentPage === 0}
+                    aria-label="Previous students"
+                    className="w-8 h-8 flex items-center justify-center rounded-md text-stone-500 hover:text-stone-900 hover:bg-stone-200 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs text-stone-500 font-medium tabular-nums px-1">
+                    {currentPage + 1} / {pageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage(currentPage + 1)}
+                    disabled={currentPage >= pageCount - 1}
+                    aria-label="Next students"
+                    className="w-8 h-8 flex items-center justify-center rounded-md text-stone-500 hover:text-stone-900 hover:bg-stone-200 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-          {processedData.students.length > 4 && (
-            <p className="text-xs text-stone-500 text-center pt-2 font-medium tracking-wide">
-              Showing 4 of {processedData.students.length} students
-            </p>
-          )}
         </div>
       )}
 
