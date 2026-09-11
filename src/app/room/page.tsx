@@ -43,9 +43,17 @@ function generateAndDownloadTxt(questions: Question[], sessionTitle: string): vo
   const sep = "─".repeat(44);
   const lines: string[] = [`=== ${sessionTitle} ===`, new Date().toLocaleString(), ""];
 
-  function label(user: { username: string; utorid?: string } | null): string {
-    if (!user) return "Anonymous";
-    return user.utorid ? `${user.username} - ${user.utorid}` : user.username;
+  // Transcripts are instructor-only, so they mirror the reveal view rather than
+  // the student view: an anonymous author is named and tagged, never redacted.
+  function label(post: {
+    user: { username: string; utorid?: string } | null;
+    isAnonymous?: boolean;
+  }): string {
+    if (!post.user) return "Anonymous";
+    const name = post.user.utorid
+      ? `${post.user.username} - ${post.user.utorid}`
+      : post.user.username;
+    return post.isAnonymous ? `${name} (anonymous)` : name;
   }
 
   if (questions.length === 0) {
@@ -53,12 +61,12 @@ function generateAndDownloadTxt(questions: Question[], sessionTitle: string): vo
   } else {
     for (const q of questions) {
       lines.push(sep);
-      lines.push(`${q.timestamp} — ${label(q.user)}`);
+      lines.push(`${q.timestamp} — ${label(q)}`);
       lines.push(`Q: ${q.content}`);
       if (q.replies.length > 0) {
         lines.push("");
         for (const r of q.replies) {
-          lines.push(`  ${r.timestamp} — ${label(r.user)}`);
+          lines.push(`  ${r.timestamp} — ${label(r)}`);
           lines.push(`  A: ${r.content}`);
         }
       }
