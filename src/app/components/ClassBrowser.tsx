@@ -208,7 +208,7 @@ function EmptyState({ isAdmin }: { isAdmin: boolean }) {
       <p className="text-stone-500 text-lg max-w-md text-center mb-8">
         {isAdmin
           ? "Upload a classlist and add the professors teaching it. Each one gets their own room."
-          : "You aren't on any classes yet. An admin adds you when they upload the classlist."}
+          : "You aren't in any classes yet. A participating admin professor will add you."}
       </p>
 
       {isAdmin && (

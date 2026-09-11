@@ -140,7 +140,7 @@ export default function ProfessorList({ rows, onChange }: ProfessorListProps) {
                   value={row.utorid}
                   spellCheck={false}
                   onChange={(e) => handleUtoridChange(row.key, e.target.value)}
-                  placeholder="UTORid — e.g. smithj"
+                  placeholder="UTORid — ex. smithj"
                   className="w-full border-2 border-stone-100 rounded-md px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all shadow-sm"
                 />
               </div>
@@ -153,7 +153,7 @@ export default function ProfessorList({ rows, onChange }: ProfessorListProps) {
                     spellCheck={false}
                     disabled={known}
                     onChange={(e) => patch(row.key, { displayName: e.target.value })}
-                    placeholder="Full name — e.g. Jane Smith"
+                    placeholder="Last name - ex. Engineer (For room naming)"
                     className="w-full border-2 border-stone-100 rounded-md px-4 py-2.5 pr-9 text-sm focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all shadow-sm disabled:bg-stone-50 disabled:text-stone-500"
                   />
                   {row.status === "checking" && (

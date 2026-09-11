@@ -884,7 +884,7 @@ export default function ManageClassModal({
                     value={professorUtorid}
                     spellCheck={false}
                     onChange={(e) => handleProfessorUtoridChange(e.target.value)}
-                    placeholder="UTORid — e.g. smithj"
+                    placeholder="UTORid — ex. smithj"
                     className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
                   />
                   <input
@@ -893,7 +893,7 @@ export default function ManageClassModal({
                     spellCheck={false}
                     disabled={professorKnown}
                     onChange={(e) => setProfessorName(e.target.value)}
-                    placeholder="Full name — e.g. Jane Smith"
+                    placeholder="Last name - ex. Engineer (For room naming)"
                     className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all disabled:bg-stone-50 disabled:text-stone-500"
                   />
                   {professorKnown ? (
