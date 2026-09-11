@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/adminWhitelist";
-import { roomLabelsFor } from "@/lib/roomLabel";
+import { surnameOf } from "@/lib/nameUtils";
 import {
   buildEnrollmentRows,
   fullNameOf,
@@ -52,7 +52,7 @@ export async function GET() {
             semester: true,
             classlistId: true,
             professorId: true,
-            professor: { select: { id: true, name: true, utorid: true, hasLoggedIn: true } },
+            professor: { select: { id: true, name: true, utorid: true } },
             classlist: {
               select: { id: true, code: true, semester: true, createdById: true },
             },
@@ -98,32 +98,18 @@ export async function GET() {
     }
 
     const classlists = [...groups.values()].map((group) => {
-      // Disambiguate surnames within a classlist, not globally — two rooms
-      // only collide if they sit next to each other.
-      const labels = roomLabelsFor(
-        group.rooms
-          .map((e) => e.course.professor)
-          .filter((p): p is NonNullable<typeof p> => !!p)
-          .map((p) => ({ id: p.id, name: p.name, utorid: p.utorid }))
-      );
-
       const rooms = group.rooms
         .map((enrollment) => {
           const { course } = enrollment;
           const session = course.sessions[0] ?? null;
           return {
             id: course.id,
-            label: course.professor
-              ? (labels.get(course.professor.id) ?? course.name)
-              : course.name,
+            // Course.name is the room's own label, set by an admin.
+            label: course.name,
             code: course.code,
             role: enrollment.role,
             professor: course.professor
-              ? {
-                  name: course.professor.name,
-                  utorid: course.professor.utorid,
-                  hasLoggedIn: course.professor.hasLoggedIn,
-                }
+              ? { name: course.professor.name, utorid: course.professor.utorid }
               : null,
             isMine: course.professorId === user.userId,
             activeSession: session ? { id: session.id, joinCode: session.joinCode } : null,
@@ -231,7 +217,6 @@ export async function POST(request: NextRequest) {
           email: user.email,
           name: user.name,
           role: "STUDENT",
-          hasLoggedIn: true,
         },
       });
 
@@ -240,10 +225,18 @@ export async function POST(request: NextRequest) {
       });
 
       // Professors, creator first — their room is the one they run.
-      const professorUsers = [{ id: user.userId, utorid: creatorUtorid }];
+      // The creator's own room falls back to their surname; they never typed a
+      // name for it.
+      const professorUsers = [
+        { id: user.userId, utorid: creatorUtorid, roomName: surnameOf(user.name) || creatorUtorid },
+      ];
       for (const input of professorInputs) {
-        const person = await upsertPersonByUtorid(tx, input.utorid, input.displayName);
-        professorUsers.push({ id: person.id, utorid: person.utorid });
+        const person = await upsertPersonByUtorid(tx, input.utorid);
+        professorUsers.push({
+          id: person.id,
+          utorid: person.utorid,
+          roomName: input.roomName || person.utorid,
+        });
       }
       const professorIds = new Set(professorUsers.map((p) => p.id));
 
@@ -273,13 +266,13 @@ export async function POST(request: NextRequest) {
       }
 
       const plans: RoomEnrollmentPlan[] = [];
-      const rooms: { id: string; professorId: string; utorid: string }[] = [];
+      const rooms: { id: string; professorId: string; utorid: string; name: string }[] = [];
 
       for (const professor of professorUsers) {
         const room = await tx.course.create({
           data: {
             code: classCode,
-            name: classCode,
+            name: professor.roomName,
             semester,
             createdById: user.userId,
             classlistId: classlist.id,
@@ -288,7 +281,12 @@ export async function POST(request: NextRequest) {
           select: { id: true },
         });
 
-        rooms.push({ id: room.id, professorId: professor.id, utorid: professor.utorid });
+        rooms.push({
+          id: room.id,
+          professorId: professor.id,
+          utorid: professor.utorid,
+          name: professor.roomName,
+        });
         plans.push({
           roomId: room.id,
           professorId: professor.id,
@@ -300,21 +298,11 @@ export async function POST(request: NextRequest) {
 
       await tx.courseEnrollment.createMany({ data: buildEnrollmentRows(plans) });
 
-      const professorRecords = await tx.user.findMany({
-        where: { id: { in: [...professorIds] } },
-        select: { id: true, name: true, utorid: true },
-      });
-      const labels = roomLabelsFor(professorRecords);
-
       return {
         id: classlist.id,
         code: classlist.code,
         semester: classlist.semester,
-        rooms: rooms.map((room) => ({
-          id: room.id,
-          utorid: room.utorid,
-          label: labels.get(room.professorId) ?? room.utorid,
-        })),
+        rooms: rooms.map((room) => ({ id: room.id, utorid: room.utorid, label: room.name })),
       };
     }, CREATE_TRANSACTION_OPTIONS);
 

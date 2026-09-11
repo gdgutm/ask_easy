@@ -8,7 +8,6 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle,
-  Clock,
   GraduationCap,
   Monitor,
   Play,
@@ -163,12 +162,6 @@ export default function RoomGrid({ classlist, onBack, onRefresh }: RoomGridProps
                 >
                   {room.label}
                 </h3>
-                {room.professor && !room.professor.hasLoggedIn && (
-                  <span className="flex items-center gap-1 text-xs text-amber-600 font-medium">
-                    <Clock className="w-3 h-3" />
-                    Temporary name — {room.professor.utorid} hasn&rsquo;t signed in yet
-                  </span>
-                )}
               </div>
 
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-stone-100 w-full text-sm font-medium text-stone-400 relative z-10">

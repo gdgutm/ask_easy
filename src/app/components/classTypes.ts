@@ -2,11 +2,11 @@ export type RoomRole = "STUDENT" | "TA" | "PROFESSOR";
 
 export interface RoomSummary {
   id: string;
-  /** The professor's surname, disambiguated within the class. */
+  /** The room's name, as an admin set it. */
   label: string;
   code: string;
   role: RoomRole;
-  professor: { name: string; utorid: string; hasLoggedIn: boolean } | null;
+  professor: { name: string; utorid: string } | null;
   /** True when the viewer is this room's professor. */
   isMine: boolean;
   activeSession: { id: string; joinCode: string } | null;

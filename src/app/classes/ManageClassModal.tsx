@@ -42,7 +42,7 @@ interface RosterEntry {
 interface RoomEntry {
   id: string;
   label: string;
-  professor: { name: string; utorid: string; hasLoggedIn: boolean } | null;
+  professor: { name: string; utorid: string } | null;
   memberCount: number;
   isLive: boolean;
   isCreatorRoom: boolean;
@@ -229,8 +229,9 @@ export default function ManageClassModal({
   // ---- Add professor state ----
   const [professorUtorid, setProfessorUtorid] = useState("");
   const [professorName, setProfessorName] = useState("");
-  const [professorKnown, setProfessorKnown] = useState(false);
   const [addingProfessor, setAddingProfessor] = useState(false);
+  const [renamingRoomId, setRenamingRoomId] = useState<string | null>(null);
+  const [renameRoomError, setRenameRoomError] = useState<string | null>(null);
   const [professorAddError, setProfessorAddError] = useState<string | null>(null);
   const [professorAddSuccess, setProfessorAddSuccess] = useState<string | null>(null);
   const [removingRoomUtorid, setRemovingRoomUtorid] = useState<string | null>(null);
@@ -406,34 +407,34 @@ export default function ManageClassModal({
     }
   }
 
-  // Adding a professor builds a room, so it takes one UTORid at a time and
-  // needs a name to label that room with.
-  async function handleProfessorUtoridChange(raw: string) {
-    const utorid = raw.trim().toLowerCase();
-    setProfessorUtorid(utorid);
-    setProfessorAddError(null);
-    setProfessorAddSuccess(null);
-    if (!utorid) {
-      setProfessorKnown(false);
-      setProfessorName("");
-      return;
-    }
+  // Adding a professor builds a room, so it takes one UTORid and the name that
+  // room will carry. Nothing is looked up: the name is the room's, not the
+  // person's, so it does not matter whether they have signed in before.
+  async function handleRenameRoom(roomId: string, name: string) {
+    const trimmed = name.trim();
+    const room = rooms.find((r) => r.id === roomId);
+    if (!trimmed || !room || trimmed === room.label) return;
 
+    setRenamingRoomId(roomId);
+    setRenameRoomError(null);
     try {
-      const res = await fetch(`/api/users/lookup?utorids=${encodeURIComponent(utorid)}`);
-      if (!res.ok) return;
+      const res = await fetch(`/api/classlists/${classlist.id}/rooms`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId, name: trimmed }),
+      });
       const data = await res.json();
-      const match = data.users?.[0];
-      // The field may have moved on while this was in flight.
-      if (match?.utorid !== utorid) return;
-      if (match.hasLoggedIn && match.name) {
-        setProfessorKnown(true);
-        setProfessorName(match.name);
-      } else {
-        setProfessorKnown(false);
+      if (!res.ok) {
+        setRenameRoomError(data.error ?? "Failed to rename the room.");
+        await fetchRoster();
+        return;
       }
+      setRooms((prev) => prev.map((r) => (r.id === roomId ? { ...r, label: trimmed } : r)));
+      onChanged();
     } catch {
-      /* leave the name editable — the admin can type one */
+      setRenameRoomError("Failed to rename the room. Please try again.");
+    } finally {
+      setRenamingRoomId(null);
     }
   }
 
@@ -441,7 +442,7 @@ export default function ManageClassModal({
     const utorid = professorUtorid.trim().toLowerCase();
     if (!utorid) return;
     if (!professorName.trim()) {
-      setProfessorAddError("Add a name — it labels their room until they first sign in.");
+      setProfessorAddError("Give the room a name — it is what everyone will see it called.");
       return;
     }
 
@@ -453,10 +454,7 @@ export default function ManageClassModal({
       const res = await fetch(`/api/classlists/${classlist.id}/professors`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          utorid,
-          ...(professorKnown ? {} : { displayName: professorName.trim() }),
-        }),
+        body: JSON.stringify({ utorid, roomName: professorName.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -466,7 +464,6 @@ export default function ManageClassModal({
       setProfessorAddSuccess(`Created a room for ${data.room?.label ?? utorid}.`);
       setProfessorUtorid("");
       setProfessorName("");
-      setProfessorKnown(false);
       await fetchRoster();
       onChanged();
     } catch {
@@ -822,9 +819,24 @@ export default function ManageClassModal({
                       <li key={room.id} className="flex items-center gap-2 px-3 py-2.5 group">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-medium text-stone-800 truncate">
-                              {room.label}
-                            </span>
+                            {/* The room's name is the admin's to change. Committing
+                                on blur or Enter keeps it a one-gesture edit. */}
+                            <input
+                              type="text"
+                              defaultValue={room.label}
+                              key={`${room.id}:${room.label}`}
+                              aria-label={`Room name for ${room.professor?.utorid ?? room.id}`}
+                              disabled={renamingRoomId === room.id}
+                              onBlur={(e) => handleRenameRoom(room.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") e.currentTarget.blur();
+                                if (e.key === "Escape") {
+                                  e.currentTarget.value = room.label;
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              className="min-w-0 flex-1 text-sm font-medium text-stone-800 bg-transparent border border-transparent rounded px-1.5 py-0.5 -ml-1.5 hover:border-stone-200 focus:border-green-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-green-50 transition-all disabled:opacity-50"
+                            />
                             {room.isLive && (
                               <span className="shrink-0 px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-[10px] font-bold border border-green-200">
                                 LIVE
@@ -836,16 +848,11 @@ export default function ManageClassModal({
                               </span>
                             )}
                           </div>
-                          <span className="text-xs text-stone-400">
+                          <span className="text-xs text-stone-400 pl-0.5">
                             {room.professor?.name ?? "Unassigned"}
                             {room.professor ? ` · ${room.professor.utorid}` : ""} ·{" "}
                             {room.memberCount} member{room.memberCount === 1 ? "" : "s"}
                           </span>
-                          {room.professor && !room.professor.hasLoggedIn && (
-                            <span className="block text-[11px] text-amber-600">
-                              Temporary name until they sign in
-                            </span>
-                          )}
                         </div>
                         {room.professor && !room.isCreatorRoom && rooms.length > 1 && (
                           <button
@@ -870,20 +877,27 @@ export default function ManageClassModal({
                   </ul>
                 )}
 
+                {renameRoomError && <p className="text-xs text-red-500">{renameRoomError}</p>}
+
                 <p className="text-xs text-stone-500">
-                  Removing a professor deletes their room and everything in it.
+                  Click a room name to rename it. Removing a professor deletes their room and
+                  everything in it.
                 </p>
 
                 <div className="border-t border-stone-100 pt-4 flex flex-col gap-3">
                   <p className="text-sm font-medium text-stone-700">Add a Professor</p>
                   <p className="text-xs text-stone-500">
-                    This creates a new room named after them, with the current roster and TAs.
+                    This creates a new room with the current roster and TAs.
                   </p>
                   <input
                     type="text"
                     value={professorUtorid}
                     spellCheck={false}
-                    onChange={(e) => handleProfessorUtoridChange(e.target.value)}
+                    onChange={(e) => {
+                      setProfessorUtorid(e.target.value.trim().toLowerCase());
+                      setProfessorAddError(null);
+                      setProfessorAddSuccess(null);
+                    }}
                     placeholder="UTORid — ex. smithj"
                     className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
                   />
@@ -891,21 +905,10 @@ export default function ManageClassModal({
                     type="text"
                     value={professorName}
                     spellCheck={false}
-                    disabled={professorKnown}
                     onChange={(e) => setProfessorName(e.target.value)}
-                    placeholder="Last name - ex. Engineer (For room naming)"
-                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all disabled:bg-stone-50 disabled:text-stone-500"
+                    placeholder="Room name — ex. Smith"
+                    className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-50 transition-all"
                   />
-                  {professorKnown ? (
-                    <p className="text-xs text-emerald-600">Name from their U of T account.</p>
-                  ) : (
-                    professorUtorid.length > 0 && (
-                      <p className="text-xs text-amber-600">
-                        Hasn&rsquo;t signed in yet — this name is temporary and is replaced by their
-                        real one when they do.
-                      </p>
-                    )
-                  )}
                   {professorAddError && <p className="text-sm text-red-600">{professorAddError}</p>}
                   {professorAddSuccess && (
                     <p className="text-sm text-green-700">{professorAddSuccess}</p>

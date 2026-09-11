@@ -9,7 +9,6 @@ import {
   normalizeProfessorInputs,
   upsertPersonByUtorid,
 } from "@/lib/classlistService";
-import { roomLabelsFor } from "@/lib/roomLabel";
 
 interface RouteParams {
   params: Promise<{ classlistId: string }>;
@@ -31,7 +30,7 @@ interface RouteParams {
  * Adds a professor and creates their room, seeded with the class's existing
  * roster and TAs plus the classlist creator as a TA.
  *
- * Request body: { utorid: string; displayName?: string }
+ * Request body: { utorid: string; roomName?: string }
  * Response: { room: { id, label, utorid } }
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -79,12 +78,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const created = await prisma.$transaction(
       async (tx) => {
-        const professor = await upsertPersonByUtorid(tx, input.utorid, input.displayName);
+        const professor = await upsertPersonByUtorid(tx, input.utorid);
 
         const room = await tx.course.create({
           data: {
             code: classlist.code,
-            name: classlist.code,
+            name: input.roomName || input.utorid,
             semester: classlist.semester,
             createdById: classlist.createdById,
             classlistId,
@@ -97,9 +96,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // The creating admin watches every room but their own.
         if (professor.id !== classlist.createdById) taIds.add(classlist.createdById);
 
-        // A professor never gets a student row in their own room, and the
-        // template room's professor is a stranger here — they stay out.
-        const otherProfessorIds = new Set(
+        // Professors of the sibling rooms must not appear in this one at all —
+        // that isolation is the point. The classlist creator is the deliberate
+        // exception: they are a TA in every room, including this one, so they
+        // are excluded from this set even though they run a room too.
+        const siblingProfessorIds = new Set(
           (
             await tx.course.findMany({
               where: { classlistId, professorId: { not: null } },
@@ -107,48 +108,42 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             })
           )
             .map((r) => r.professorId)
-            .filter((id): id is string => !!id && id !== professor.id)
+            .filter(
+              (id): id is string => !!id && id !== professor.id && id !== classlist.createdById
+            )
         );
 
+        // Nobody who instructs this room gets a student row in it.
         const studentIds = seed
           .filter((e) => e.role === "STUDENT")
           .map((e) => e.userId)
-          .filter((id) => id !== professor.id && !otherProfessorIds.has(id));
+          .filter(
+            (id) =>
+              id !== professor.id && id !== classlist.createdById && !siblingProfessorIds.has(id)
+          );
 
         await tx.courseEnrollment.createMany({
           data: buildEnrollmentRows([
             {
               roomId: room.id,
               professorId: professor.id,
-              taIds: [...taIds].filter((id) => !otherProfessorIds.has(id)),
+              taIds: [...taIds].filter((id) => !siblingProfessorIds.has(id)),
               studentIds,
             },
           ]),
         });
 
-        return { roomId: room.id, professorId: professor.id, utorid: professor.utorid };
+        return {
+          roomId: room.id,
+          utorid: professor.utorid,
+          label: input.roomName || input.utorid,
+        };
       },
       { maxWait: 10_000, timeout: 120_000 }
     );
 
-    // Label against the whole class so a new Smith gets an initial and so does
-    // the Smith who was already there.
-    const professors = await prisma.course.findMany({
-      where: { classlistId, professorId: { not: null } },
-      select: { professor: { select: { id: true, name: true, utorid: true } } },
-    });
-    const labels = roomLabelsFor(
-      professors.map((p) => p.professor!).filter((p): p is NonNullable<typeof p> => !!p)
-    );
-
     return NextResponse.json(
-      {
-        room: {
-          id: created.roomId,
-          utorid: created.utorid,
-          label: labels.get(created.professorId) ?? created.utorid,
-        },
-      },
+      { room: { id: created.roomId, utorid: created.utorid, label: created.label } },
       { status: 201 }
     );
   } catch (error) {

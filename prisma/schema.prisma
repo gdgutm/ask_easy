@@ -59,10 +59,6 @@ model User {
   name  String
   /// Always STUDENT. Real roles live on CourseEnrollment, per room.
   role  Role   @default(STUDENT)
-  /// False while `name` is a placeholder — a UTORid, or a temporary name an
-  /// admin typed when assigning this person to a class. Set on first sign-in,
-  /// when Shibboleth gives us their real name.
-  hasLoggedIn Boolean @default(false)
 
   enrollments       CourseEnrollment[]
   createdCourses    Course[]
@@ -101,14 +97,17 @@ model Classlist {
 /// CourseEnrollment on it has role PROFESSOR.
 model Course {
   id        String   @id @default(cuid())
+  /// The classlist's code, copied here for display. Same across sibling rooms.
   code      String
+  /// The room's label, e.g. "Nakamura". Set by the admin who created the room
+  /// and only ever changed by an admin — it is the room's name, not the
+  /// professor's, so signing in never rewrites it.
   name      String
   semester  String
   createdById String
   /// Null only for rooms created before classlists existed.
   classlistId String?
-  /// The room's one professor. Its display label is derived from this user's
-  /// name, so it follows them when a placeholder name is replaced at sign-in.
+  /// The room's one professor.
   professorId String?
 
   createdBy   User               @relation(fields: [createdById], references: [id])

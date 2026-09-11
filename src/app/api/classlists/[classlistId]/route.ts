@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireClasslistAdmin } from "@/lib/classlistAccess";
 import { deleteRooms, liveRoomIds } from "@/lib/classlistService";
-import { roomLabelsFor } from "@/lib/roomLabel";
 
 interface RouteParams {
   params: Promise<{ classlistId: string }>;
@@ -33,19 +32,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       where: { classlistId },
       select: {
         id: true,
+        name: true,
         professorId: true,
-        professor: { select: { id: true, name: true, utorid: true, hasLoggedIn: true } },
+        professor: { select: { id: true, name: true, utorid: true } },
         _count: { select: { enrollments: true } },
       },
+      orderBy: { name: "asc" },
     });
 
     const live = new Set(await liveRoomIds(roomIds));
-    const labels = roomLabelsFor(
-      rooms
-        .map((r) => r.professor)
-        .filter((p): p is NonNullable<typeof p> => !!p)
-        .map((p) => ({ id: p.id, name: p.name, utorid: p.utorid }))
-    );
 
     return NextResponse.json({
       classlist: {
@@ -53,22 +48,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         code: classlist.code,
         semester: classlist.semester,
         createdById: classlist.createdById,
-        rooms: rooms
-          .map((room) => ({
-            id: room.id,
-            label: room.professorId ? (labels.get(room.professorId) ?? "") : "",
-            professor: room.professor
-              ? {
-                  name: room.professor.name,
-                  utorid: room.professor.utorid,
-                  hasLoggedIn: room.professor.hasLoggedIn,
-                }
-              : null,
-            memberCount: room._count.enrollments,
-            isLive: live.has(room.id),
-            isCreatorRoom: room.professorId === classlist.createdById,
-          }))
-          .sort((a, b) => a.label.localeCompare(b.label)),
+        rooms: rooms.map((room) => ({
+          id: room.id,
+          label: room.name,
+          professor: room.professor
+            ? { name: room.professor.name, utorid: room.professor.utorid }
+            : null,
+          memberCount: room._count.enrollments,
+          isLive: live.has(room.id),
+          isCreatorRoom: room.professorId === classlist.createdById,
+        })),
       },
     });
   } catch (error) {
@@ -129,10 +118,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         select: { id: true, code: true, semester: true },
       });
 
+      // Only the copied-for-display fields. `name` is the room's own label and
+      // renaming the class must not wipe what an admin chose to call each room.
       await tx.course.updateMany({
         where: { classlistId },
         data: {
-          ...(updates.code ? { code: updates.code, name: updates.code } : {}),
+          ...(updates.code ? { code: updates.code } : {}),
           ...(updates.semester ? { semester: updates.semester } : {}),
         },
       });

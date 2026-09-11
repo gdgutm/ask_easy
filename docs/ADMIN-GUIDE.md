@@ -184,7 +184,8 @@ four tabs:
 ### Rooms & TAs tab
 
 - One row per room, showing who runs it, how many members it has, and whether it is live
-- Add a professor — this creates them a room seeded with the current roster and TAs
+- Click a room's name to rename it. The name is the room's, not the professor's — it is yours to set and nothing else ever changes it
+- Add a professor — this creates them a room, with the name you give it, seeded with the current roster and TAs
 - Remove a professor — this **deletes their room and everything in it**. Blocked on the last professor and on a live room
 - Add TAs by UTORid — they become TAs in every room on the class
 

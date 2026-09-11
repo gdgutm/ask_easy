@@ -78,13 +78,9 @@ export default function CreateClassPage() {
       .split(/[\n,\s]+/)
       .map((s) => s.trim())
       .filter(Boolean);
-    // A room is labelled by its professor's name, so an unnamed professor
-    // would leave a room nobody can identify.
     const unnamed = professorRowsMissingNames(professorRows);
     if (unnamed.length > 0) {
-      setSubmitError(
-        `Add a name for ${unnamed.join(", ")} — it labels their room until they first sign in.`
-      );
+      setSubmitError(`Give ${unnamed.join(", ")} a room name — it is what their room is called.`);
       setSubmitting(false);
       return;
     }

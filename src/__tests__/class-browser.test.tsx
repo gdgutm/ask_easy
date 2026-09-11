@@ -52,7 +52,7 @@ describe("ClassBrowser", () => {
             label: "Smith",
             code: "TES101",
             role: "STUDENT",
-            professor: { name: "Jane Smith", utorid: "smithj", hasLoggedIn: true },
+            professor: { name: "Jane Smith", utorid: "smithj" },
             isMine: false,
             activeSession: null,
           },
@@ -61,7 +61,7 @@ describe("ClassBrowser", () => {
             label: "Haddad",
             code: "TES101",
             role: "STUDENT",
-            professor: { name: "Omar Haddad", utorid: "haddado", hasLoggedIn: true },
+            professor: { name: "Omar Haddad", utorid: "haddado" },
             isMine: false,
             activeSession: null,
           },
@@ -87,7 +87,7 @@ describe("ClassBrowser", () => {
             label: "Smith",
             code: "TES101",
             role: "STUDENT",
-            professor: { name: "Jane Smith", utorid: "smithj", hasLoggedIn: true },
+            professor: { name: "Jane Smith", utorid: "smithj" },
             isMine: false,
             activeSession: { id: "s1", joinCode: "ABC123" },
           },
@@ -96,7 +96,7 @@ describe("ClassBrowser", () => {
             label: "Haddad",
             code: "TES101",
             role: "STUDENT",
-            professor: { name: "Omar Haddad", utorid: "haddado", hasLoggedIn: true },
+            professor: { name: "Omar Haddad", utorid: "haddado" },
             isMine: false,
             activeSession: null,
           },
@@ -126,7 +126,7 @@ describe("ClassBrowser", () => {
             label: "Smith",
             code: "TES101",
             role: "PROFESSOR",
-            professor: { name: "Jane Smith", utorid: "smithj", hasLoggedIn: true },
+            professor: { name: "Jane Smith", utorid: "smithj" },
             isMine: true,
             activeSession: null,
           },
@@ -151,7 +151,7 @@ describe("ClassBrowser", () => {
             label: "Smith",
             code: "TES101",
             role: "STUDENT",
-            professor: { name: "Jane Smith", utorid: "smithj", hasLoggedIn: false },
+            professor: { name: "Jane Smith", utorid: "smithj" },
             isMine: false,
             activeSession: null,
           },
@@ -162,7 +162,7 @@ describe("ClassBrowser", () => {
     render(<ClassBrowser isAdmin={false} />);
     fireEvent.click(await screen.findByText("TES101"));
 
-    expect(screen.getByText(/Temporary name/)).toBeTruthy();
+    expect(screen.getByText("Smith")).toBeTruthy();
   });
 
   test("only the class creator gets the manage control", async () => {
@@ -187,7 +187,7 @@ describe("ClassBrowser", () => {
             label: "Smith",
             code: "TES101",
             role: "STUDENT",
-            professor: { name: "Jane Smith", utorid: "smithj", hasLoggedIn: true },
+            professor: { name: "Jane Smith", utorid: "smithj" },
             isMine: false,
             activeSession: null,
           },

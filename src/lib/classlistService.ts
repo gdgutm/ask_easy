@@ -12,8 +12,8 @@ import { deleteFile } from "@/lib/storage";
 
 export interface ProfessorInput {
   utorid: string;
-  /** Temporary name to show until this person signs in. Ignored once they have. */
-  displayName?: string;
+  /** The name for this professor's room. Permanent; only an admin changes it. */
+  roomName?: string;
 }
 
 export interface StudentInput {
@@ -46,9 +46,9 @@ export function normalizeUtorids(raw: unknown): string[] {
 }
 
 /**
- * Accepts either `["smithj"]` or `[{ utorid, displayName }]` and normalizes to
- * the latter. The plain-string form exists because not every caller has a name
- * to offer (adding a professor from the roster screen, for instance).
+ * Accepts either `["smithj"]` or `[{ utorid, roomName }]` and normalizes to the
+ * latter. The plain-string form exists because not every caller has a room name
+ * to offer; those rooms fall back to the professor's surname.
  */
 export function normalizeProfessorInputs(raw: unknown): ProfessorInput[] {
   if (!Array.isArray(raw)) return [];
@@ -56,23 +56,25 @@ export function normalizeProfessorInputs(raw: unknown): ProfessorInput[] {
 
   for (const entry of raw) {
     let utorid = "";
-    let displayName: string | undefined;
+    let roomName: string | undefined;
 
     if (typeof entry === "string") {
       utorid = entry.trim().toLowerCase();
     } else if (entry && typeof entry === "object") {
       const record = entry as Record<string, unknown>;
       utorid = typeof record.utorid === "string" ? record.utorid.trim().toLowerCase() : "";
-      const name = typeof record.displayName === "string" ? record.displayName.trim() : "";
-      if (name) displayName = name;
+      // `displayName` is still accepted for older callers.
+      const raw2 = record.roomName ?? record.displayName;
+      const name = typeof raw2 === "string" ? raw2.trim() : "";
+      if (name) roomName = name;
     }
 
     if (!utorid || INVALID_UTORIDS.has(utorid)) continue;
 
     // Later entries win only when they carry a name the earlier one lacked.
     const existing = byUtorid.get(utorid);
-    if (!existing) byUtorid.set(utorid, { utorid, displayName });
-    else if (!existing.displayName && displayName) existing.displayName = displayName;
+    if (!existing) byUtorid.set(utorid, { utorid, roomName });
+    else if (!existing.roomName && roomName) existing.roomName = roomName;
   }
 
   return [...byUtorid.values()];
@@ -107,41 +109,30 @@ type Tx = Prisma.TransactionClient;
 /**
  * Finds or creates the User for a UTORid.
  *
- * `displayName` is only ever written to a user who has not signed in — their
- * `name` is a placeholder at that point, so replacing it is an improvement.
- * A real name from Shibboleth is never overwritten by something an admin typed.
+ * A new row is named after the UTORid until that person signs in and
+ * Shibboleth gives us their real name. Nothing here writes a name an admin
+ * typed: that name belongs to a room, not to a person.
  */
 export async function upsertPersonByUtorid(
   tx: Tx,
-  utorid: string,
-  displayName?: string
-): Promise<{ id: string; utorid: string; name: string; hasLoggedIn: boolean }> {
+  utorid: string
+): Promise<{ id: string; utorid: string; name: string }> {
   const existing = await tx.user.findUnique({
     where: { utorid },
-    select: { id: true, utorid: true, name: true, hasLoggedIn: true },
+    select: { id: true, utorid: true, name: true },
   });
 
-  if (!existing) {
-    return tx.user.create({
-      data: {
-        utorid,
-        name: displayName || utorid,
-        email: `${utorid}@mail.utoronto.ca`,
-        role: "STUDENT",
-      },
-      select: { id: true, utorid: true, name: true, hasLoggedIn: true },
-    });
-  }
+  if (existing) return existing;
 
-  if (displayName && !existing.hasLoggedIn && existing.name !== displayName) {
-    return tx.user.update({
-      where: { id: existing.id },
-      data: { name: displayName },
-      select: { id: true, utorid: true, name: true, hasLoggedIn: true },
-    });
-  }
-
-  return existing;
+  return tx.user.create({
+    data: {
+      utorid,
+      name: utorid,
+      email: `${utorid}@mail.utoronto.ca`,
+      role: "STUDENT",
+    },
+    select: { id: true, utorid: true, name: true },
+  });
 }
 
 export interface RoomEnrollmentPlan {

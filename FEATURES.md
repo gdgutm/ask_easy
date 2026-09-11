@@ -41,8 +41,7 @@ actually happens, and it has exactly one professor.
 - **Semester auto-detection** from current date (Jan–Apr = Winter, May–Aug = Summer, Sep–Dec = Fall)
 - **CSV enrollment** — upload a CSV with columns: `utorid`, `givenName`, `surname`, `Email` (optional); rows with "Missing UTORid" or "ERROR" are skipped
 - **One room per professor** — the creating admin gets a room of their own plus TA access to every other room; each other professor gets one room and no access to the rest
-- **Professor names** — a UTORid that has signed in autofills its real name; one that has not takes a temporary name from the admin, replaced at first sign-in
-- **Room labels** — the professor's surname alone, disambiguated with a first initial when two collide and with the UTORid when that is still ambiguous
+- **Room names** — the admin types a name for each professor's room (the creator's own defaults to their surname). It is the room's name, not the professor's: signing in never rewrites it, and only an admin changes it afterwards
 - **TA assignment** — TAs added at creation are TAs in every room on the class
 
 ### Who sees what
@@ -62,7 +61,8 @@ one to enter a colleague's room on the same class.
 
 - **Rename** — an admin updates the class code and/or semester; the change fans out to every room
 - **Delete** — cascading deletion (questions, answers, upvotes, slide sets, sessions, enrollments) across all rooms; blocked while any room is live
-- **Add a professor** — creates a room seeded with the current roster and TAs
+- **Add a professor** — creates a room, named by the admin, seeded with the current roster and TAs
+- **Rename a room** — admin-only; the professor of a room cannot rename it
 - **Remove a professor** — deletes their room; blocked on the last professor and on a live room
 
 ### Roster Management

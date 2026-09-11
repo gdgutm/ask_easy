@@ -73,24 +73,18 @@ export async function GET(request: NextRequest) {
   //    CourseEnrollment. User.role is therefore only ever STUDENT and is
   //    kept solely as the default for new enrollment rows.
   // ------------------------------------------------------------------
-  //
-  //    hasLoggedIn also flips true here. Until it does, `name` may be a
-  //    placeholder an admin typed when assigning this person to a class, and
-  //    the identity provider's name replaces it now.
   const user = await prisma.user.upsert({
     where: { utorid },
     update: {
       ...(name ? { name } : {}),
       ...(email ? { email } : {}),
       role: "STUDENT",
-      hasLoggedIn: true,
     },
     create: {
       utorid,
       name: name ?? utorid,
       email: email ?? `${utorid}@mail.utoronto.ca`,
       role: "STUDENT",
-      hasLoggedIn: true,
     },
   });
 
