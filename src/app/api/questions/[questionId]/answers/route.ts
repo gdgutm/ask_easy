@@ -130,10 +130,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Answer mode check — mirror the socket-layer restriction
       const mode = await redisCache.get(answerModeKey(sessionId));
       if (mode === "instructors_only") {
-        // The author exemption stops at anonymous questions — see answerHandlers.
-        const isQuestionAuthor =
-          questionValidation.question!.authorId === user.userId &&
-          !questionValidation.question!.isAnonymous;
+        const isQuestionAuthor = questionValidation.question!.authorId === user.userId;
         if (!isQuestionAuthor) {
           const effectiveRole = enrollment?.role ?? "STUDENT";
           if (effectiveRole === "STUDENT") {
