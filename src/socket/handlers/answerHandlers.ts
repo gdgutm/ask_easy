@@ -117,16 +117,13 @@ export function handleAnswerCreate(socket: Socket, io: Server): void {
       }
 
       // 4. Answer mode check — if restricted, only TAs, professors, and the
-      //    question's own author may answer (so a student can follow up in their thread).
-      //    That exemption stops at anonymous questions: with everyone else locked
-      //    out, a reply from the asker would identify them as the asker.
-      //    Role is resolved via CourseEnrollment so TAs are correctly detected
-      //    (User.role is always STUDENT for TAs globally).
+      //    question's own author may answer (so a student can follow up in their
+      //    thread, including when the question was anonymous — keep the anon
+      //    toggle on to stay anonymous). Role is resolved via CourseEnrollment
+      //    so TAs are correctly detected (User.role is always STUDENT for TAs).
       const mode = await redisCache.get(answerModeKey(sessionId));
       if (mode === "instructors_only") {
-        const isQuestionAuthor =
-          questionValidation.question!.authorId === userId &&
-          !questionValidation.question!.isAnonymous;
+        const isQuestionAuthor = questionValidation.question!.authorId === userId;
         if (!isQuestionAuthor) {
           const effectiveRole = answerEnrollment?.role ?? "STUDENT";
           if (effectiveRole === "STUDENT") {
