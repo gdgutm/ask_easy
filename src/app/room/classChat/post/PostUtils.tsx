@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ArrowBigUp, Eye, EyeOff, GraduationCap } from "lucide-react";
+import { ArrowBigUp, Eye, EyeOff, Ghost, GraduationCap } from "lucide-react";
 import { Post, User, getInitials, isLikelyAvatarImageUrl } from "@/utils/types";
 
 export function renderAvatar(post: Post, revealed?: boolean) {
@@ -21,8 +21,8 @@ export function renderAvatar(post: Post, revealed?: boolean) {
   }
   return (
     <Avatar className="h-10 w-10">
-      <AvatarFallback className="text-stone-400 bg-stone-100 text-sm font-medium tracking-tighter">
-        ST
+      <AvatarFallback className="text-stone-400 bg-stone-100">
+        <Ghost className="h-4 w-4" />
       </AvatarFallback>
     </Avatar>
   );
