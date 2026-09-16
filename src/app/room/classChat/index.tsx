@@ -123,9 +123,10 @@ function apiQuestionToPost(q: APIQuestion, answers: APIAnswer[]): Question {
 interface ClassChatProps {
   /** Receives the full chat history (including deleted messages) for session export. */
   chatHistoryRef?: React.MutableRefObject<Question[]>;
+  onMinimize: () => void;
 }
 
-export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
+export default function ClassChat({ chatHistoryRef, onMinimize }: ClassChatProps) {
   const { socket, sessionId, userId, role, slideContextRef, sessionTitle } = useRoom();
 
   const [commentView, setCommentView] = useState<"all" | "unresolved" | "resolved">("all");
@@ -755,6 +756,7 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
         onToggleAnswerMode={handleToggleAnswerMode}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        onMinimizeChat={onMinimize}
       />
 
       <div className="flex-1 relative min-h-0">
