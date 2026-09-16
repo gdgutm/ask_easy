@@ -55,12 +55,12 @@ function ReplySection({ canAnswer, onSubmit, onCancel }: ReplySectionProps) {
     <div className="pt-1 pb-2">
       <Textarea
         autoFocus
-        placeholder="Write an answer..."
+        placeholder={`Write an answer...\n(Ctrl+Enter to post)`}
         className="min-h-[72px] mb-2 focus-visible:ring-0 focus-visible:border-stone-400"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
+          if (e.key === "Enter" && e.ctrlKey) {
             e.preventDefault();
             handleSubmit();
           }
