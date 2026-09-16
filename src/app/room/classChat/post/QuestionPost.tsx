@@ -54,6 +54,7 @@ function ReplySection({ canAnswer, onSubmit, onCancel }: ReplySectionProps) {
   return (
     <div className="pt-1 pb-2">
       <Textarea
+        autoFocus
         placeholder="Write an answer..."
         className="min-h-[72px] mb-2 focus-visible:ring-0 focus-visible:border-stone-400"
         value={text}
