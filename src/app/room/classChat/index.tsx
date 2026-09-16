@@ -146,6 +146,11 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
   const historyRef = useRef<Question[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
 
+  useEffect(() => {
+    const savedMode = localStorage.getItem(`notificationMode:${sessionId}`);
+    setNotificationMode(savedMode === "sound" || savedMode === "browser" ? savedMode : "off");
+  }, [sessionId]);
+
   const playQuestionBeep = (mode = notificationMode) => {
     if (mode === "off" || typeof window === "undefined") return;
 
@@ -631,6 +636,7 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
     const nextMode =
       notificationMode === "off" ? "sound" : notificationMode === "sound" ? "browser" : "off";
     setNotificationMode(nextMode);
+    localStorage.setItem(`notificationMode:${sessionId}`, nextMode);
     if (nextMode !== "off") playQuestionBeep(nextMode);
     if (nextMode === "browser") {
       void requestBrowserNotificationPermission();
