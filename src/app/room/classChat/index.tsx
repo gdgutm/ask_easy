@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type React from "react";
 
 import { useRoom } from "../RoomContext";
@@ -141,6 +141,8 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const pendingScrollAnchorRef = useRef<{ id: string; top: number } | null>(null);
   // Separate history that keeps deleted messages (marked as [deleted]) for the
   // session export. Never removes items — deletions are marked in-place.
   const historyRef = useRef<Question[]>([]);
@@ -300,6 +302,13 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
         slideSetId: payload.slideSetId ?? null,
       };
 
+      const focusedQuestion = document.activeElement?.closest<HTMLElement>("[id^='question-']");
+      if (focusedQuestion && chatScrollRef.current?.contains(focusedQuestion)) {
+        pendingScrollAnchorRef.current = {
+          id: focusedQuestion.id,
+          top: focusedQuestion.getBoundingClientRect().top,
+        };
+      }
       setQuestions((prev) => [...prev, newQuestion]);
       historyRef.current = [...historyRef.current, { ...newQuestion, replies: [] }];
       if (!payload.isMine) {
@@ -551,6 +560,17 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
     // when the questions state changes (which always follows a history update).
   }, [questions, chatHistoryRef]);
 
+  useLayoutEffect(() => {
+    const anchor = pendingScrollAnchorRef.current;
+    if (!anchor) return;
+
+    const question = document.getElementById(anchor.id);
+    if (question && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop += question.getBoundingClientRect().top - anchor.top;
+    }
+    pendingScrollAnchorRef.current = null;
+  }, [questions]);
+
   // Land on the newest questions once the initial history has loaded
   useEffect(() => {
     if (isLoading) return;
@@ -745,7 +765,7 @@ export default function ClassChat({ chatHistoryRef }: ClassChatProps) {
           </div>
         </div>
 
-        <div className="absolute inset-0 overflow-y-auto px-4 pt-16">
+        <div ref={chatScrollRef} className="absolute inset-0 overflow-y-auto px-4 pt-16">
           <div className="max-w-4xl mx-auto space-y-4 pb-36">
             {isLoading ? (
               <div className="text-center text-stone-500 py-8 text-sm">Loading questions...</div>
