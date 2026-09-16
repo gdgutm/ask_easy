@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { io, type Socket } from "socket.io-client";
-import { Download, Square, X } from "lucide-react";
+import { Download, PanelRightClose, Square, X } from "lucide-react";
+import type { ImperativePanelHandle } from "react-resizable-panels";
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -17,7 +18,6 @@ import {
   type SlideContextSnapshot,
   type SlideNavigationTarget,
 } from "./RoomContext";
-import { SlideUpdateContext } from "./SlideUpdateContext";
 
 function passedSlideReturnTarget(
   returnTarget: SlideContextSnapshot,
@@ -157,7 +157,7 @@ function RoomInner() {
   const titleParam = searchParams.get("title") ?? "";
 
   const isMdSize = useMediaQuery("(min-width: 1024px)");
-  const [isSlidesVisible, setIsSlidesVisible] = useState(true);
+  const [isChatVisible, setIsChatVisible] = useState(true);
   const [resizableWidth, setResizableWidth] = useState(32);
 
   const [userId, setUserId] = useState("");
@@ -168,6 +168,7 @@ function RoomInner() {
   const [showEndModal, setShowEndModal] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
   const chatHistoryRef = useRef<Question[]>([]);
+  const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const slideContextRef = useRef<SlideContextSnapshot>({
     slidePageIndex: null,
     slideSetId: null,
@@ -215,7 +216,6 @@ function RoomInner() {
         };
       }
 
-      setIsSlidesVisible(true);
       setSlideNavTarget({
         slidePageIndex: target.slidePageIndex,
         slideSetId: target.slideSetId,
@@ -379,10 +379,6 @@ function RoomInner() {
     handleEndSession();
   };
 
-  function rerender() {
-    setIsSlidesVisible((prev) => !prev);
-  }
-
   const isProfessor = role === "PROFESSOR";
 
   return (
@@ -400,38 +396,44 @@ function RoomInner() {
       }}
     >
       <div className="relative h-screen w-full bg-background font-sans">
-        <SlideUpdateContext.Provider value={{ isSlidesVisible, rerender }}>
-          {isSlidesVisible ? (
-            <div className="h-screen w-full bg-background font-sans">
-              <ResizablePanelGroup direction={isMdSize ? "horizontal" : "vertical"}>
-                <ResizablePanel
-                  defaultSize={100 - resizableWidth}
-                  minSize={0}
-                  onResize={(panelWidth) => setResizableWidth(panelWidth)}
-                >
-                  <SlideViewer
-                    isProfessor={isProfessor}
-                    onEndLecture={isProfessor ? () => setShowEndModal(true) : undefined}
-                    onSlideContextChange={handleSlideContextChange}
-                    slideNavTarget={slideNavTarget}
-                  />
-                </ResizablePanel>
-                <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={resizableWidth} minSize={32}>
-                  <ClassChat chatHistoryRef={chatHistoryRef} />
-                </ResizablePanel>
-              </ResizablePanelGroup>
-            </div>
-          ) : (
-            <div className="h-screen w-full bg-background font-sans">
-              <ResizablePanelGroup direction={isMdSize ? "horizontal" : "vertical"}>
-                <ResizablePanel minSize={30}>
-                  <ClassChat chatHistoryRef={chatHistoryRef} />
-                </ResizablePanel>
-              </ResizablePanelGroup>
-            </div>
-          )}
-        </SlideUpdateContext.Provider>
+        <ResizablePanelGroup direction={isMdSize ? "horizontal" : "vertical"}>
+          <ResizablePanel defaultSize={100 - resizableWidth} minSize={0}>
+            <SlideViewer
+              isProfessor={isProfessor}
+              onEndLecture={isProfessor ? () => setShowEndModal(true) : undefined}
+              onSlideContextChange={handleSlideContextChange}
+              slideNavTarget={slideNavTarget}
+            />
+          </ResizablePanel>
+          <ResizableHandle withHandle className={isChatVisible ? "" : "invisible"} />
+          <ResizablePanel
+            ref={chatPanelRef}
+            defaultSize={resizableWidth}
+            minSize={32}
+            collapsible
+            collapsedSize={0}
+            onCollapse={() => setIsChatVisible(false)}
+            onExpand={() => setIsChatVisible(true)}
+            onResize={(size) => {
+              if (size >= 32) setResizableWidth(size);
+            }}
+          >
+            <ClassChat
+              chatHistoryRef={chatHistoryRef}
+              onMinimize={() => chatPanelRef.current?.collapse()}
+            />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+        {!isChatVisible && (
+          <button
+            onClick={() => chatPanelRef.current?.expand()}
+            title="Show chat"
+            aria-label="Show chat"
+            className="absolute top-2 right-2 z-20 w-9 h-9 flex items-center justify-center rounded-md bg-stone-50/90 text-stone-600 shadow-sm border border-stone-200 hover:bg-stone-100 transition-colors"
+          >
+            <PanelRightClose className={`w-5 h-5 ${isMdSize ? "rotate-180" : "rotate-270"}`} />
+          </button>
+        )}
       </div>
 
       {showEndModal && (

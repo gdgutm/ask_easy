@@ -1,7 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import { useContext, useState } from "react";
+import { useState } from "react";
 import {
   PanelRightClose,
   Users,
@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import ManageTAsModal from "./ManageTAsModal";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { SlideUpdateContext } from "../SlideUpdateContext";
 import { useRoom } from "../RoomContext";
 import type { Role } from "@/utils/types";
 
@@ -31,36 +30,20 @@ interface ChatHeaderProps {
   onToggleAnswerMode: () => void;
   searchQuery: string;
   onSearchChange: (value: string) => void;
+  onMinimizeChat: () => void;
 }
 
-function SlideToggle() {
-  const { isSlidesVisible, rerender } = useContext(SlideUpdateContext);
+function ChatMinimizeButton({ onClick }: { onClick: () => void }) {
   const isMDsize = useMediaQuery("(min-width: 1024px)");
 
-  if (!isMDsize) {
-    return (
-      <button
-        className="w-9 h-9 flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-200/60 rounded-md transition-colors"
-        onClick={() => rerender()}
-      >
-        {isSlidesVisible ? (
-          <PanelRightClose className="w-5 h-5 rotate-270" />
-        ) : (
-          <PanelRightClose className="w-5 h-5 rotate-90" />
-        )}
-      </button>
-    );
-  }
   return (
     <button
       className="w-9 h-9 flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-200/60 rounded-md transition-colors"
-      onClick={() => rerender()}
+      onClick={onClick}
+      title="Hide chat"
+      aria-label="Hide chat"
     >
-      {isSlidesVisible ? (
-        <PanelRightClose className="w-5 h-5 rotate-180" />
-      ) : (
-        <PanelRightClose className="w-5 h-5" />
-      )}
+      <PanelRightClose className={`w-5 h-5 ${isMDsize ? "" : "rotate-90"}`} />
     </button>
   );
 }
@@ -73,9 +56,9 @@ export default function ChatHeader({
   onToggleAnswerMode,
   searchQuery,
   onSearchChange,
+  onMinimizeChat,
 }: ChatHeaderProps) {
   const { sessionTitle, slideReturnTarget, goBackToPreviousSlide } = useRoom();
-  const { isSlidesVisible } = useContext(SlideUpdateContext);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [showTAModal, setShowTAModal] = useState(false);
   const notificationButton =
@@ -141,8 +124,8 @@ export default function ChatHeader({
           ) : (
             <>
               <div className="flex items-center gap-2 shrink-0 animate-in fade-in duration-200">
-                <SlideToggle />
-                {slideReturnTarget?.slidePageIndex != null && !isSlidesVisible && (
+                <ChatMinimizeButton onClick={onMinimizeChat} />
+                {slideReturnTarget?.slidePageIndex != null && (
                   <button
                     onClick={goBackToPreviousSlide}
                     className="flex items-center gap-1.5 h-9 px-3 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-md text-sm font-medium transition-colors shrink-0"
