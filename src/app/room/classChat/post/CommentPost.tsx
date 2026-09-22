@@ -73,7 +73,7 @@ export default function CommentPost({ post, onUpvote, onDelete }: CommentPostPro
                     onDelete();
                     setConfirmingDelete(false);
                   }}
-                  className="px-2 py-0.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors"
+                  className="px-2 py-0.5 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded-md font-medium transition-colors"
                 >
                   Delete
                 </button>
@@ -90,7 +90,7 @@ export default function CommentPost({ post, onUpvote, onDelete }: CommentPostPro
                 size="sm"
                 onClick={() => setConfirmingDelete(true)}
                 title="Delete answer"
-                className="h-7 px-2 gap-1 text-xs text-stone-400 hover:text-stone-900 hover:bg-stone-200/60 transition-colors"
+                className="h-7 px-2 gap-1 text-xs text-stone-400 hover:text-red-700 hover:bg-red-50 transition-colors"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>

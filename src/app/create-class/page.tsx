@@ -131,7 +131,7 @@ export default function CreateClassPage() {
       <div className="absolute top-6 left-7 z-10">
         <Link
           href="/"
-          className="flex items-center justify-center gap-2 py-2.5 px-4 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-md transition-colors font-medium text-sm"
+          className="flex items-center justify-center gap-2 py-2.5 px-4 bg-stone-100 hover:bg-stone-200 text-stone-600 dark:bg-accent dark:hover:bg-accent/80 dark:text-accent-foreground rounded-md transition-colors font-medium text-sm"
         >
           <ArrowLeft className="w-4 h-4" />
           Back

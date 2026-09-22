@@ -81,8 +81,8 @@ export default function ChatInput({
                   onClick={() => onAnonymousChange(!isAnonymous)}
                   className={`flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium transition-colors cursor-pointer ${
                     isAnonymous
-                      ? "bg-stone-800 hover:bg-stone-700 text-stone-50"
-                      : "bg-stone-200 hover:bg-stone-300 text-stone-700"
+                      ? "bg-stone-800 hover:bg-stone-700 text-stone-50 dark:!bg-dark-accent dark:hover:!bg-dark-accent/80"
+                      : "bg-stone-200 hover:bg-stone-300 text-stone-700 dark:!bg-secondary dark:hover:!bg-accent"
                   }`}
                 >
                   {isAnonymous ? (
@@ -103,8 +103,8 @@ export default function ChatInput({
                     onClick={() => onIncludeSlideContextChange(!includeSlideContext)}
                     className={`flex shrink-0 items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium whitespace-nowrap transition-colors cursor-pointer ${
                       includeSlideContext
-                        ? "bg-stone-800 hover:bg-stone-700 text-stone-50"
-                        : "bg-stone-200 hover:bg-stone-300 text-stone-700"
+                        ? "bg-stone-800 hover:bg-stone-700 text-stone-50 dark:!bg-dark-accent dark:hover:!bg-dark-accent/80"
+                        : "bg-stone-200 hover:bg-stone-300 text-stone-700 dark:!bg-secondary dark:hover:!bg-accent"
                     }`}
                     title={
                       includeSlideContext
@@ -121,7 +121,7 @@ export default function ChatInput({
               <button
                 onClick={handleSubmit}
                 disabled={!canPost}
-                className="flex items-center justify-center gap-1.5 h-9 px-4 bg-stone-900 hover:bg-stone-800 text-stone-50 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-1.5 h-9 px-4 bg-stone-900 hover:bg-stone-800 text-stone-50 dark:!bg-dark-accent dark:hover:!bg-dark-accent/80 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Post
                 <Send className="w-4 h-4" />

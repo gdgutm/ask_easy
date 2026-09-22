@@ -72,7 +72,7 @@ export default function DeleteConfirmModal({
 
         {/* Content */}
         <div className="p-6 flex flex-col gap-4">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700 leading-relaxed">
+          <div className="bg-red-50 border border-red-200 dark:border-secondary rounded-lg p-4 text-sm text-red-700 leading-relaxed">
             {description}
           </div>
 

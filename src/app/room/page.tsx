@@ -429,7 +429,7 @@ function RoomInner() {
             onClick={() => chatPanelRef.current?.expand()}
             title="Show chat"
             aria-label="Show chat"
-            className="absolute top-2 right-2 z-20 w-9 h-9 flex items-center justify-center rounded-md bg-stone-50/90 text-stone-600 shadow-sm border border-stone-200 hover:bg-stone-100 transition-colors"
+            className="absolute top-2 right-2 z-20 w-9 h-9 flex items-center justify-center rounded-md bg-secondary/90 text-muted-foreground shadow-sm border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
           >
             <PanelRightClose className={`w-5 h-5 ${isMdSize ? "rotate-180" : "rotate-270"}`} />
           </button>

@@ -1029,7 +1029,7 @@ export default function ManageClassModal({
           {/* ---- Delete ---- */}
           {activeTab === "delete" && (
             <div className="flex flex-col gap-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+              <div className="bg-red-50 border border-red-200 dark:border-secondary rounded-lg p-4 text-sm text-red-700">
                 This will permanently delete <strong>{classlist.code}</strong>, all {rooms.length}{" "}
                 of its rooms, and every session, slide and question in them. This cannot be undone.
               </div>
