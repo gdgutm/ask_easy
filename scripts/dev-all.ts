@@ -12,10 +12,10 @@
  *   TA       -> http://localhost:3001   askeasy-dev-ta
  *   STUDENT  -> http://localhost:3002   askeasy-dev-student
  *
- * PROF / TA / STUDENT are labels for which tab is which, not roles. Roles are
- * granted per class by an admin, so a persona is a professor only once it has
- * been assigned to a class — sign in as an admin (ADMIN_WHITELIST) and add the
- * other personas' UTORids when you create the classlist.
+ * PROF / TA / STUDENT are labels for which tab is which, not enrollment roles.
+ * PROF personas are auto-added to ADMIN_WHITELIST so they can create classlists
+ * (creating one makes them the professor of their own room). TA / STUDENT stay
+ * students until an admin assigns them.
  *
  * Extra instances of a label get sequential ports, distinct cookie names /
  * dist dirs, and numbered default identities (devprof2, …). Override with
@@ -247,7 +247,19 @@ function repairNextEnv(): void {
   }
 }
 
-function printSummary(resolved: ResolvedPersona[]): void {
+/** Merge existing ADMIN_WHITELIST with every PROF persona so they can create classes. */
+function adminWhitelistFor(resolved: ResolvedPersona[]): string {
+  const entries = (process.env.ADMIN_WHITELIST ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  for (const { spec, utorid } of resolved) {
+    if (spec.key.startsWith("PROF")) entries.push(utorid.toLowerCase());
+  }
+  return [...new Set(entries)].join(",");
+}
+
+function printSummary(resolved: ResolvedPersona[], adminWhitelist: string): void {
   if (warnings.length > 0) {
     console.log("");
     for (const warning of warnings) {
@@ -278,11 +290,9 @@ function printSummary(resolved: ResolvedPersona[]): void {
   }
   console.log("");
   console.log(
-    `${DIM}  Everyone starts as a student. Sign in as an admin (ADMIN_WHITELIST) to${RESET}`
+    `${DIM}  PROF personas are admins (${adminWhitelist || "none"}) and can create classlists.${RESET}`
   );
-  console.log(
-    `${DIM}  create a classlist and assign the other personas as professors or TAs.${RESET}`
-  );
+  console.log(`${DIM}  Assign TA / STUDENT personas from the class after creating it.${RESET}`);
   console.log("");
 }
 
@@ -319,7 +329,7 @@ const READY_PATTERN = /Ready on/;
 const READY_TIMEOUT_MS = 120_000;
 
 /** Spawns one instance and resolves once it reports ready (or gives up waiting). */
-function launch(persona: ResolvedPersona, tsx: string): Promise<void> {
+function launch(persona: ResolvedPersona, tsx: string, adminWhitelist: string): Promise<void> {
   const { spec, utorid, name, email } = persona;
 
   const child = spawn(tsx, ["watch", "src/server.ts"], {
@@ -334,6 +344,10 @@ function launch(persona: ResolvedPersona, tsx: string): Promise<void> {
       DEV_EMAIL: email,
       SESSION_COOKIE_NAME: spec.cookieName,
       NEXT_DIST_DIR: spec.distDir,
+      // PROF utorids are merged in so those tabs can create classlists without
+      // hand-editing ADMIN_WHITELIST. Same value on every child keeps behaviour
+      // consistent if someone opens /dashboard from another persona's port.
+      ADMIN_WHITELIST: adminWhitelist,
     },
   });
 
@@ -419,7 +433,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  printSummary(resolved);
+  const adminWhitelist = adminWhitelistFor(resolved);
+  printSummary(resolved, adminWhitelist);
 
   repairNextEnv();
 
@@ -432,7 +447,7 @@ async function main(): Promise<void> {
   // Launching all at once interleaves those writes and corrupts the file,
   // which then breaks `pnpm typecheck` and the pre-commit hook.
   for (const persona of resolved) {
-    await launch(persona, tsx);
+    await launch(persona, tsx, adminWhitelist);
     if (shuttingDown) return;
   }
 
