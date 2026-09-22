@@ -9,7 +9,6 @@ import {
   Search,
   X,
   UserPlus,
-  Undo2,
   VolumeOff,
   Volume2,
   BellRing,
@@ -58,7 +57,7 @@ export default function ChatHeader({
   onSearchChange,
   onMinimizeChat,
 }: ChatHeaderProps) {
-  const { sessionTitle, slideReturnTarget, goBackToPreviousSlide } = useRoom();
+  const { sessionTitle } = useRoom();
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [showTAModal, setShowTAModal] = useState(false);
   const notificationButton =
@@ -125,15 +124,6 @@ export default function ChatHeader({
             <>
               <div className="flex items-center gap-2 shrink-0 animate-in fade-in duration-200">
                 <ChatMinimizeButton onClick={onMinimizeChat} />
-                {slideReturnTarget?.slidePageIndex != null && (
-                  <button
-                    onClick={goBackToPreviousSlide}
-                    className="flex items-center gap-1.5 h-9 px-3 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-md text-sm font-medium transition-colors shrink-0"
-                  >
-                    <Undo2 className="w-3.5 h-3.5" />
-                    Back to slide {slideReturnTarget.slidePageIndex + 1}
-                  </button>
-                )}
                 {sessionTitle && (
                   <h1 className="text-xl font-bold shrink-0" title={sessionTitle}>
                     {sessionTitle.slice(0, TITLE_MAX_CHARS)}

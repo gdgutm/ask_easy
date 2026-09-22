@@ -388,7 +388,7 @@ function SlideUI({
                 <Radio className="w-4 h-4" />
                 Controlling
               </div>
-              <div className="flex items-center gap-1.5 h-9 px-3 bg-stone-100 text-stone-700 rounded-md text-sm font-medium">
+              <div className="flex items-center gap-1.5 h-9 px-3 bg-stone-100 text-stone-700 dark:!bg-dark-accent rounded-md text-sm font-medium">
                 <Users className="w-4 h-4" />
                 {viewerCount}
               </div>
@@ -425,7 +425,7 @@ function SlideUI({
               ) : (
                 <button
                   onClick={() => router.push("/")}
-                  className="flex items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-red-100 hover:text-red-700 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 h-9 px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   Exit
@@ -434,7 +434,7 @@ function SlideUI({
 
               <div className="w-px h-6 bg-stone-200 mx-1" />
               <button
-                className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 rounded-md transition-colors cursor-pointer"
+                className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 dark:!bg-dark-accent dark:hover:!bg-dark-accent/80 rounded-md transition-colors cursor-pointer"
                 onClick={() => navigateTo(pageIndex === 0 ? pageCount - 1 : pageIndex - 1)}
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -451,7 +451,7 @@ function SlideUI({
                 {pageCount > 0 && <span className="text-stone-500">/ {pageCount}</span>}
               </div>
               <button
-                className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 rounded-md transition-colors cursor-pointer"
+                className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 dark:!bg-dark-accent dark:hover:!bg-dark-accent/80 rounded-md transition-colors cursor-pointer"
                 onClick={() => navigateTo((pageIndex + 1) % pageCount)}
               >
                 <ChevronRight className="w-5 h-5" />
@@ -480,7 +480,7 @@ function SlideUI({
               ) : (
                 <>
                   <button
-                    className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 rounded-md transition-colors cursor-pointer"
+                    className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 dark:!bg-dark-accent dark:hover:!bg-dark-accent/80 rounded-md transition-colors cursor-pointer"
                     onClick={() => navigateTo(pageIndex === 0 ? pageCount - 1 : pageIndex - 1)}
                   >
                     <ChevronLeft className="w-5 h-5" />
@@ -497,14 +497,14 @@ function SlideUI({
                     {pageCount > 0 && <span className="text-stone-500">/ {pageCount}</span>}
                   </div>
                   <button
-                    className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 rounded-md transition-colors cursor-pointer"
+                    className="w-9 h-9 flex items-center justify-center bg-stone-900 hover:bg-stone-700 text-stone-50 dark:!bg-dark-accent dark:hover:!bg-dark-accent/80 rounded-md transition-colors cursor-pointer"
                     onClick={() => navigateTo((pageIndex + 1) % pageCount)}
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>
                   <button
                     onClick={handleFollow}
-                    className="flex shrink-0 items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
+                    className="flex shrink-0 items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-stone-300 text-stone-700 dark:!bg-dark-accent dark:text-foreground dark:hover:!bg-dark-accent/80 rounded-md text-sm font-medium transition-colors cursor-pointer"
                   >
                     <Radio className="w-4 h-4" />
                     Back to Live
@@ -536,7 +536,7 @@ function SlideUI({
               ) : (
                 <button
                   onClick={() => router.push("/")}
-                  className="flex items-center gap-1.5 h-9 px-3 bg-stone-200 hover:bg-red-100 hover:text-red-700 text-stone-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 h-9 px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-sm font-medium transition-colors cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   Exit

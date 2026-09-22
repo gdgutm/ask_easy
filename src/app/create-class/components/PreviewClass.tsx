@@ -67,7 +67,7 @@ export default function PreviewClass({
               {(file.size / 1024).toFixed(2)} KB • {processedData?.students?.length || 0} students
               found
             </p>
-            <div className="flex items-center gap-1.5 mt-3 text-stone-700 text-sm font-medium bg-stone-200/50 w-fit px-2 py-1 rounded-md">
+            <div className="flex items-center gap-1.5 mt-3 text-stone-700 text-sm font-medium bg-stone-200/50 dark:bg-background w-fit px-2 py-1 rounded-md">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>Ready to align and process</span>
             </div>

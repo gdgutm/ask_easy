@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleHelp, LayoutDashboard } from "lucide-react";
+import { CircleHelp, LayoutDashboard, Moon, Sun } from "lucide-react";
 
 import { User, getInitials, isLikelyAvatarImageUrl } from "@/utils/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -60,6 +60,16 @@ export default function LandingPage() {
     void load();
   }, []);
 
+  const toggleDarkMode = () => {
+    const next = !document.documentElement.classList.contains("dark");
+    document.documentElement.classList.toggle("dark", next);
+    try {
+      localStorage.setItem("theme", next ? "dark" : "light");
+    } catch {
+      /* storage blocked — keep the theme for this visit */
+    }
+  };
+
   const handleOnboardingComplete = () => {
     try {
       localStorage.setItem(`hasSeenOnboarding_${isInstructor ? "INSTRUCTOR" : "STUDENT"}`, "true");
@@ -89,18 +99,30 @@ export default function LandingPage() {
             Dashboard
           </Link>
         )}
-        <button
-          className="w-10 h-10 flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-200/60 rounded-md transition-colors"
-          onClick={() => setShowOnboarding(true)}
-        >
-          <CircleHelp className="w-5 h-5" />
-        </button>
         <Avatar className="h-10 w-10 shadow-sm border-2 border-stone-100">
           {isLikelyAvatarImageUrl(user.pfp) && <AvatarImage src={user.pfp} alt={user.username} />}
           <AvatarFallback className="bg-white font-medium text-lg text-stone-900 tracking-tighter">
             {getInitials(user.username)}
           </AvatarFallback>
         </Avatar>
+        <button
+          type="button"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+          className="w-10 h-10 flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-200/60 rounded-md transition-colors"
+          onClick={toggleDarkMode}
+        >
+          <Moon className="w-5 h-5 dark:hidden" />
+          <Sun className="hidden w-5 h-5 dark:block" />
+        </button>
+        <button
+          type="button"
+          aria-label="Open onboarding"
+          className="w-10 h-10 flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-200/60 rounded-md transition-colors"
+          onClick={() => setShowOnboarding(true)}
+        >
+          <CircleHelp className="w-5 h-5" />
+        </button>
       </div>
 
       <div className="overflow-y-auto flex-1 flex flex-col">

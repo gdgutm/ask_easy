@@ -71,7 +71,12 @@ function ReplySection({ canAnswer, onSubmit, onCancel }: ReplySectionProps) {
           <Button variant="ghost" size="sm" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSubmit} disabled={!canPost}>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={!canPost}
+            className="dark:!bg-dark-accent dark:hover:!bg-dark-accent/80"
+          >
             Post reply
           </Button>
         </div>
@@ -204,7 +209,7 @@ export default function QuestionPost({
                   slideSetId: post.slideSetId!,
                 })
               }
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 font-medium hover:bg-stone-200 hover:text-stone-800 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 font-medium hover:bg-stone-200 hover:text-stone-800 dark:!bg-dark-accent dark:hover:!bg-dark-accent/80 transition-colors cursor-pointer"
               title="Go to this slide"
             >
               <Presentation className="h-3 w-3" />
@@ -235,7 +240,7 @@ export default function QuestionPost({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-xs bg-red-600 hover:bg-red-700 text-white hover:text-white"
+                className="h-7 px-2 text-xs bg-red-100 hover:bg-red-200 text-red-700 hover:text-red-700"
                 onClick={() => {
                   onDelete!();
                   setConfirmingDelete(false);
@@ -309,7 +314,7 @@ export default function QuestionPost({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 text-xs gap-1 text-stone-400 hover:text-stone-900 hover:bg-stone-200/60"
+                  className="h-7 px-2 text-xs gap-1 text-stone-400 hover:text-red-700 hover:bg-red-50"
                   onClick={() => setConfirmingDelete(true)}
                   title="Delete question"
                 >
