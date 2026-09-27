@@ -10,6 +10,18 @@ AskEasy is built for that moment. It gives every lecture a live Q&A room where t
 
 ---
 
+## Demo Video
+
+https://github.com/user-attachments/assets/00b9afc0-10c0-4039-a3a9-907df75e1eed
+### Features shown
+- Creating a class
+- Posting a question
+- Upvoting a question
+- Anonymous mode
+- Browser notifications
+- Chat transcript
+- Dashboard
+
 ## Architecture
 
 ```
