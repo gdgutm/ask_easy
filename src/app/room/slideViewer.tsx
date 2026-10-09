@@ -10,6 +10,7 @@ import {
   SquareMousePointer,
   Upload,
   LogOut,
+  Minimize,
   Unlink,
   Undo2,
 } from "lucide-react";
@@ -38,6 +39,8 @@ interface SlideViewerProps {
   onEndLecture?: () => void;
   onSlideContextChange?: (ctx: SlideContextSnapshot) => void;
   slideNavTarget?: SlideContextSnapshot | null;
+  isPresenting?: boolean;
+  onExitPresenting?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +67,8 @@ interface SlideUIProps {
   onSlideContextChange?: (ctx: SlideContextSnapshot) => void;
   onReplaceSlides?: (file: File) => void;
   onEndLecture?: () => void;
+  isPresenting?: boolean;
+  onExitPresenting?: () => void;
 }
 
 function SlideUI({
@@ -74,6 +79,8 @@ function SlideUI({
   onSlideContextChange,
   onReplaceSlides,
   onEndLecture,
+  isPresenting,
+  onExitPresenting,
 }: SlideUIProps) {
   const { socket, sessionId, userId, role, slideReturnTarget, goBackToPreviousSlide } = useRoom();
   const router = useRouter();
@@ -239,6 +246,26 @@ function SlideUI({
     [pageCount, navigateToLocal, isControlling, socket, sessionId]
   );
 
+  // -------------------------------------------------------------------------
+  // Presenter view — slides fill the tab
+  // -------------------------------------------------------------------------
+
+  // The controls bar is hidden while presenting, so a follower has no "Back to
+  // Live" — leave them following rather than silently detaching them.
+  const canStep = isPresenting && (isControlling || mode === "browsing");
+
+  useEffect(() => {
+    if (!isPresenting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onExitPresenting?.();
+      else if (!canStep) return;
+      else if (e.key === "ArrowRight") navigateTo(pageIndex + 1);
+      else if (e.key === "ArrowLeft") navigateTo(pageIndex - 1);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isPresenting, canStep, onExitPresenting, navigateTo, pageIndex]);
+
   // Question-badge jump: the person driving takes the room with them; everyone
   // else detaches and looks on their own.
   useEffect(() => {
@@ -337,7 +364,23 @@ function SlideUI({
   // -------------------------------------------------------------------------
 
   return (
-    <div className="flex flex-col flex-1 w-full min-h-0">
+    <div
+      onClick={canStep ? () => navigateTo(pageIndex + 1) : undefined}
+      className={`flex flex-col w-full min-h-0 ${isPresenting ? "fixed inset-0 z-50 bg-black" : "flex-1"}`}
+    >
+      {isPresenting && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onExitPresenting?.();
+          }}
+          title="Exit presenter view (Esc)"
+          aria-label="Exit presenter view"
+          className="absolute top-2 right-2 z-10 w-9 h-9 flex items-center justify-center rounded-md bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
+        >
+          <Minimize className="w-5 h-5" />
+        </button>
+      )}
       {/* Slide canvas */}
       {activeDocumentId ? (
         <DocumentContent documentId={activeDocumentId}>
@@ -364,8 +407,10 @@ function SlideUI({
         </div>
       )}
 
-      {/* Controls bar — always rendered */}
-      <div className="shrink-0 w-full overflow-x-auto overscroll-x-contain">
+      {/* Controls bar — always rendered, hidden while presenting */}
+      <div
+        className={`shrink-0 w-full overflow-x-auto overscroll-x-contain ${isPresenting ? "hidden" : ""}`}
+      >
         <div className="flex w-max min-w-full items-center justify-center gap-3 px-4 py-4 whitespace-nowrap">
           {slideReturnTarget?.slidePageIndex != null && (
             <>
@@ -651,6 +696,8 @@ export default function SlideViewer({
   onEndLecture,
   onSlideContextChange,
   slideNavTarget,
+  isPresenting,
+  onExitPresenting,
 }: SlideViewerProps) {
   const { engine, isLoading: engineLoading } = usePdfiumEngine();
   const { sessionId, socket } = useRoom();
@@ -850,6 +897,8 @@ export default function SlideViewer({
             onSlideContextChange={onSlideContextChange}
             onReplaceSlides={isProfessor ? handleUpload : undefined}
             onEndLecture={isProfessor ? onEndLecture : undefined}
+            isPresenting={isPresenting}
+            onExitPresenting={onExitPresenting}
           />
         )}
       </EmbedPDF>
