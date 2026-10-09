@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { io, type Socket } from "socket.io-client";
-import { Download, PanelRightClose, Square, X } from "lucide-react";
+import { Download, Maximize, PanelRightClose, Square, X } from "lucide-react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -169,6 +169,7 @@ function RoomInner() {
   const [endingSession, setEndingSession] = useState(false);
   const chatHistoryRef = useRef<Question[]>([]);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
+  const [isPresenting, setIsPresenting] = useState(false);
   const slideContextRef = useRef<SlideContextSnapshot>({
     slidePageIndex: null,
     slideSetId: null,
@@ -403,6 +404,8 @@ function RoomInner() {
               onEndLecture={isProfessor ? () => setShowEndModal(true) : undefined}
               onSlideContextChange={handleSlideContextChange}
               slideNavTarget={slideNavTarget}
+              isPresenting={isPresenting}
+              onExitPresenting={() => setIsPresenting(false)}
             />
           </ResizablePanel>
           <ResizableHandle withHandle className={isChatVisible ? "" : "invisible"} />
@@ -425,14 +428,24 @@ function RoomInner() {
           </ResizablePanel>
         </ResizablePanelGroup>
         {!isChatVisible && (
-          <button
-            onClick={() => chatPanelRef.current?.expand()}
-            title="Show chat"
-            aria-label="Show chat"
-            className="absolute top-2 right-2 z-20 w-9 h-9 flex items-center justify-center rounded-md bg-secondary/90 text-muted-foreground shadow-sm border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
-          >
-            <PanelRightClose className={`w-5 h-5 ${isMdSize ? "rotate-180" : "rotate-270"}`} />
-          </button>
+          <div className="absolute top-2 right-2 z-20 flex flex-col gap-2">
+            <button
+              onClick={() => chatPanelRef.current?.expand()}
+              title="Show chat"
+              aria-label="Show chat"
+              className="w-9 h-9 flex items-center justify-center rounded-md bg-secondary/90 text-muted-foreground shadow-sm border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+            >
+              <PanelRightClose className={`w-5 h-5 ${isMdSize ? "rotate-180" : "rotate-270"}`} />
+            </button>
+            <button
+              onClick={() => setIsPresenting(true)}
+              title="Presenter view (Esc to exit)"
+              aria-label="Presenter view"
+              className="w-9 h-9 flex items-center justify-center rounded-md bg-secondary/90 text-muted-foreground shadow-sm border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+            >
+              <Maximize className="w-5 h-5" />
+            </button>
+          </div>
         )}
       </div>
 
